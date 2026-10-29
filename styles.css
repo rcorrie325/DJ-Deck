@@ -282,3 +282,39 @@ dialog select { background: #0e1015; border: 1px solid var(--line); border-radiu
 .pitch .keylock { width: 100%; font-weight: 700; letter-spacing: .05em; }
 .pitch .keylock.on { background: var(--c); color: #000; border-color: var(--c); }
 .pitch .range { width: 100%; }
+/* MIDI */
+.midi-learn-bar {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 20;
+  display: flex; align-items: center; gap: 12px; justify-content: center;
+  padding: 8px 16px; background: #2a2208; border-bottom: 1px solid var(--warn); color: #ffe3a3;
+  box-shadow: 0 4px 20px rgba(0,0,0,.5);
+}
+.midi-learn-bar[hidden] { display: none; }
+.midi-learn-text { min-width: 0; overflow-wrap: anywhere; }
+.midi-learning .midi-target { outline: 1px dashed rgba(255,176,32,.55); outline-offset: 2px; cursor: crosshair; }
+.midi-learning .midi-target:hover { outline: 2px solid rgba(255,176,32,.8); }
+.midi-learning .midi-mapped { outline: 2px solid rgba(61,255,139,.7); }
+.midi-learning .midi-selected { outline: 3px solid var(--warn); animation: midi-pulse .8s ease-in-out infinite alternate; }
+@keyframes midi-pulse { from { outline-color: var(--warn); } to { outline-color: rgba(255,176,32,.25); } }
+#trackBody tr.midi-sel td { background: #232a3a; box-shadow: inset 0 1px 0 var(--warn), inset 0 -1px 0 var(--warn); }
+.midi-dialog h3.midi-h3 { margin: 16px 0 6px; font-size: 13px; display: flex; align-items: center; gap: 8px; }
+.midi-devices { list-style: none; padding: 0; margin: 0 0 10px; }
+.midi-devices li { padding: 4px 0; overflow-wrap: anywhere; }
+.midi-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--ok); margin-right: 8px; box-shadow: 0 0 6px var(--ok); }
+.midi-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+#midiLearn.on { background: #3a2c08; border-color: var(--warn); color: #ffe3a3; }
+.midi-dialog label.midi-check { flex-direction: row; align-items: flex-start; gap: 8px; }
+.midi-dialog label.midi-check input { margin: 2px 0 0; }
+.midi-how { margin-top: 10px; }
+.midi-how summary { cursor: pointer; color: var(--muted); }
+.midi-how ol { padding-left: 20px; margin: 8px 0; }
+.midi-how li { margin-bottom: 4px; }
+.midi-map-wrap { max-height: 220px; overflow: auto; border: 1px solid var(--line); border-radius: 6px; }
+.midi-map { width: 100%; border-collapse: collapse; table-layout: auto; }
+.midi-map td { padding: 4px 6px; border-bottom: 1px solid var(--line); vertical-align: middle; overflow-wrap: anywhere; }
+.midi-map tr:last-child td { border-bottom: 0; }
+.midi-map td:nth-child(3), .midi-map td:nth-child(4) { width: 1%; white-space: nowrap; }
+.midi-dialog label.midi-led-l { flex-direction: row; align-items: center; gap: 4px; font-size: 11px; color: var(--muted); }
+.midi-dialog input.midi-led { padding: 0; margin: 0; }
+.midi-dialog menu { flex-wrap: wrap; }
+.midi-import { display: inline-flex; align-items: center; }

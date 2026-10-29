@@ -18,6 +18,7 @@
         <option value="smooth">Fader: Smooth</option>
         <option value="sharp">Fader: Sharp</option>
       </select>
+      <button id="midiBtn" class="btn" title="DJ controller (MIDI)">🎛</button>
       <button id="helpBtn" class="btn" title="Keyboard shortcuts">?</button>
       <button id="settingsBtn" class="btn" title="Settings">⚙</button>
       <button id="spotifyBtn" class="btn spotify">Connect Spotify</button>
@@ -182,6 +183,38 @@
       </table>
       <p class="muted">Knobs: drag up/down, scroll, double-click to reset. Shift-drag for fine control.</p>
       <menu><button class="btn" value="close">Close</button></menu>
+    </form>
+  </dialog>
+
+  <dialog id="midiDialog" class="midi-dialog">
+    <form method="dialog">
+      <h2>DJ controller</h2>
+      <p id="midiStatus" class="muted">Plug in your controller, then press Connect.</p>
+      <ul id="midiDevices" class="midi-devices"></ul>
+      <div class="midi-actions">
+        <button type="button" class="btn" id="midiConnect">Connect controller</button>
+        <button type="button" class="btn" id="midiLearn">MIDI Learn</button>
+      </div>
+      <label class="midi-check"><input type="checkbox" id="midiLed" checked> LED feedback (lights play, cue, sync, hot cue, loop and headphone-cue buttons)</label>
+      <details class="midi-how">
+        <summary>How to map a controller</summary>
+        <ol>
+          <li>Press <b>Connect controller</b> and allow MIDI access.</li>
+          <li>Press <b>MIDI Learn</b>. Every mappable control gets an outline.</li>
+          <li>Click a control on screen (for example Deck A ▶), then press or move the matching button, knob, fader or jog wheel on your controller.</li>
+          <li>Repeat for each control. <kbd>Esc</kbd> cancels; right-click or Shift-click a mapped control to clear it. Press <b>Done</b> when finished.</li>
+          <li><b>Export</b> saves your mapping as a file you can share with people who have the same controller.</li>
+        </ol>
+        <p class="muted">Knobs and faders use soft takeover: they start moving once the hardware passes the on-screen position.</p>
+      </details>
+      <h3 class="midi-h3">Mappings <span id="midiCount" class="count">0</span></h3>
+      <div class="midi-map-wrap"><table class="midi-map"><tbody id="midiMappings"></tbody></table></div>
+      <menu>
+        <button type="button" class="btn" id="midiExport">Export</button>
+        <label class="btn midi-import">Import<input type="file" id="midiImport" accept="application/json,.json" hidden></label>
+        <button type="button" class="btn" id="midiClear">Clear all</button>
+        <button class="btn" value="close">Close</button>
+      </menu>
     </form>
   </dialog>
 

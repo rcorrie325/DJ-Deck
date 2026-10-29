@@ -27,7 +27,48 @@ the matching tracks from their own music files.
 - Each Spotify track is matched to your local files (✓ = match found) and loads onto a deck like any other track
 - ▶ preview any Spotify track in a separate Spotify player (Premium)
 
-Keyboard shortcuts are listed under the **?** button.
+Keyboard shortcuts are listed under the **?** button. DJ controllers can be
+mapped with MIDI Learn under **🎛** (see below).
+
+## Using a DJ controller
+
+SpinDeck can be played from any MIDI DJ controller through Web MIDI. This
+works in **Chrome and Edge** only (Firefox and Safari don't support Web MIDI).
+
+1. Plug the controller in over USB.
+2. Click **🎛** in the top bar, then **Connect controller** and allow MIDI
+   access. Your controller is listed in the dialog (unplugging and replugging is
+   picked up automatically).
+3. Click **MIDI Learn**. Every control you can map gets an outline. Click one on
+   screen (for example Deck A ▶, the tempo fader, an EQ knob or a platter), then
+   press, turn or move the matching control on your controller. Repeat for
+   every control you want. <kbd>Esc</kbd> cancels the current pick;
+   right-click (or Shift-click) a mapped control to clear it. Click **Done** in
+   the bar at the top when you're finished.
+4. Click **Export** to save the mapping as a JSON file. Others with the same
+   controller model can load it with **Import**. Mappings are also kept in the
+   browser and saved per device name.
+
+What you can map: play, cue (hold to preview), sync, key lock, hot cues, loop
+pads, loop in/out/reloop/½/×2, nudge, tempo fader, jog wheels (bend while
+playing, scrub while paused), every mixer knob, channel faders, crossfader,
+headphone cue and FX buttons, plus a library browse encoder and "load selected
+track" (click the track title area of a deck). Some of these only appear when
+the matching on-screen control exists.
+
+Details:
+- Knobs and faders use **soft takeover**: they start moving once the hardware
+  passes the on-screen value, so nothing jumps.
+- Jog wheels and endless encoders are detected as relative controls; both the
+  64-centred and two's-complement styles are recognised automatically.
+- **LED feedback** lights play, cue, sync, key lock, hot cue, loop and headphone
+  cue buttons on controllers that support it. It can be turned off in the dialog
+  or per mapping.
+- **Audio:** controllers with a built-in sound card can be picked as the output
+  device in Settings. Headphone cue needs a 4-channel (2 stereo outputs)
+  controller.
+- This has been tested with a simulated controller only, not on physical
+  hardware yet. Reports and shared mapping files are welcome.
 
 ## Why Spotify tracks don't play through the decks
 
@@ -163,10 +204,11 @@ js/waveform.js    canvas waveform rendering
 js/library.js     local file import, ID3 tags, Spotify↔local matching
 js/spotify.js     Spotify PKCE auth, Web API client, Web Playback SDK preview
 js/knob.js        rotary knob control
+js/midi.js        Web MIDI: devices, MIDI Learn, soft takeover, LED feedback
+js/midi-targets.js  list of controls a controller can be mapped to
 ```
 
 ## Limitations / ideas for next steps
 
 - The local library resets on reload. Persisting it with the File System Access API would fix that.
 - No separate headphone cue output (needs `AudioContext.setSinkId` and a second audio device).
-- MIDI controller support could be added with the Web MIDI API.

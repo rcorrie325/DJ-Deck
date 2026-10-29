@@ -5,6 +5,8 @@ import { Spotify } from './spotify.js';
 import { analyzeTrack } from './analysis.js';
 import { drawZoom, drawOverview } from './waveform.js';
 import { Knob } from './knob.js';
+import { Midi } from './midi.js';
+import { buildTargets } from './midi-targets.js';
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
@@ -753,5 +755,6 @@ setupMixer();
 setupLibrary();
 setupTopbar();
 setupKeys();
+window.spindeck.midi = new Midi({ targets: buildTargets({ decks, mixer, toast }), toast });
 initSpotify();
 requestAnimationFrame(frame);
