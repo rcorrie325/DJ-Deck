@@ -1,5 +1,5 @@
 import { Deck } from './deck.js';
-import { Mixer, peakLevel } from './mixer.js';
+import { Mixer, peakLevel, FX_BEATS } from './mixer.js';
 import { Library } from './library.js';
 import { Spotify } from './spotify.js';
 import { analyzeTrack } from './analysis.js';
@@ -258,24 +258,152 @@ async function loadToDeck(id, track) {
 // ---------- mixer ----------
 
 function setupMixer() {
+  // Registry of every mixer knob, keyed 'A.trim', 'B.fx-depth', 'master', 'cue-mix', … (used by MIDI mapping).
+  const knobs = (window.spindeck.knobs ||= {});
+  const knob = (key, el, opts) => { knobs[key] = new Knob(el, opts); return knobs[key]; };
   for (const id of ['A', 'B']) {
     const col = $(`.mix-col[data-ch="${id}"]`);
-    new Knob($('[data-k="trim"]', col), { label: 'GAIN', onChange: (v) => mixer.setTrim(id, v) });
-    new Knob($('[data-k="high"]', col), { label: 'HI', onChange: (v) => mixer.setEq(id, 'high', v) });
-    new Knob($('[data-k="mid"]', col), { label: 'MID', onChange: (v) => mixer.setEq(id, 'mid', v) });
-    new Knob($('[data-k="low"]', col), { label: 'LOW', onChange: (v) => mixer.setEq(id, 'low', v) });
-    new Knob($('[data-k="filter"]', col), { label: 'FILTER', onChange: (v) => mixer.setFilter(id, v) });
+    knob(`${id}.trim`, $('[data-k="trim"]', col), { label: 'GAIN', onChange: (v) => mixer.setTrim(id, v) });
+    knob(`${id}.high`, $('[data-k="high"]', col), { label: 'HI', onChange: (v) => mixer.setEq(id, 'high', v) });
+    knob(`${id}.mid`, $('[data-k="mid"]', col), { label: 'MID', onChange: (v) => mixer.setEq(id, 'mid', v) });
+    knob(`${id}.low`, $('[data-k="low"]', col), { label: 'LOW', onChange: (v) => mixer.setEq(id, 'low', v) });
+    knob(`${id}.filter`, $('[data-k="filter"]', col), { label: 'FILTER', onChange: (v) => mixer.setFilter(id, v) });
     const fader = $(`#fader${id}`);
     fader.addEventListener('input', () => mixer.setFader(id, +fader.value));
     mixer.setFader(id, +fader.value);
+    setupFx(id, col, knob);
+
+    const pfl = $('.pfl', col);
+    pfl.addEventListener('click', () => {
+      const on = !mixer.channels[id].cueOn;
+      mixer.setCue(id, on);
+      pfl.classList.toggle('on', on);
+      pfl.setAttribute('aria-pressed', on);
+    });
+
+    // Keep echo / flanger in time with the deck's playing tempo.
+    const deck = decks[id];
+    deck.addEventListener('change', () => mixer.setFxBpm(id, deck.currentBpm));
+    mixer.setFxBpm(id, deck.currentBpm);
   }
-  new Knob($('.master-col [data-k="master"]'), {
+  knob('master', $('.master-col [data-k="master"]'), {
     label: 'MASTER', min: 0, max: 1, value: 0.8, onChange: (v) => mixer.setMaster(v),
   });
+  knob('cue-mix', $('.master-col [data-k="cue-mix"]'), {
+    label: 'CUE MIX', min: 0, max: 1, value: 0, onChange: (v) => mixer.setCueMix(v),
+  });
+  knob('phones', $('.master-col [data-k="phones"]'), {
+    label: 'PHONES', min: 0, max: 1, value: 0.8, onChange: (v) => mixer.setPhones(v),
+  });
+  $('.master-col [data-k="cue-mix"]').title = 'Headphone mix: cue ↔ master';
+  $('.master-col [data-k="phones"]').title = 'Headphone level';
   const xf = $('#xfader');
   xf.addEventListener('input', () => mixer.setCrossfader(+xf.value));
   xf.addEventListener('dblclick', () => { xf.value = 0.5; mixer.setCrossfader(0.5); });
   $('#xfCurve').addEventListener('change', (e) => mixer.setCurve(e.target.value));
+
+  mixer.onroute = updateCueAvailability;
+  updateCueAvailability();
+  setupOutputSettings();
+}
+
+const BEAT_LABELS = { 0.5: '½', 0.75: '¾', 1: '1', 2: '2', 4: '4' };
+
+function setupFx(id, col, knob) {
+  const type = $('.fx-type', col);
+  const on = $('.fx-on', col);
+  const beatsEl = $('[data-k="fx-beats"]', col);
+  const steps = FX_BEATS.length - 1;
+  let beatsKnob = null;
+  const refreshBeats = () => {
+    const { type: t, beats } = mixer.getFx(id);
+    const lbl = $('.knob-label', beatsEl);
+    if (t === 'reverb') { lbl.textContent = 'BEATS'; beatsEl.title = 'Not used by reverb'; }
+    else if (t === 'flanger') { lbl.textContent = `RATE ${BEAT_LABELS[beats]}`; beatsEl.title = `Flanger sweep: one cycle every ${beats} bar(s)`; }
+    else { lbl.textContent = `BEAT ${BEAT_LABELS[beats]}`; beatsEl.title = `Echo time: ${beats} beat(s)`; }
+    beatsEl.classList.toggle('inactive', t === 'reverb');
+  };
+  type.addEventListener('change', () => { mixer.setFx(id, { type: type.value }); refreshBeats(); });
+  on.addEventListener('click', () => {
+    const v = !mixer.getFx(id).on;
+    mixer.setFx(id, { on: v });
+    on.classList.toggle('on', v);
+    on.setAttribute('aria-pressed', v);
+  });
+  knob(`${id}.fx-depth`, $('[data-k="fx-depth"]', col), {
+    label: 'DEPTH', min: 0, max: 1, value: 0.5, onChange: (v) => mixer.setFx(id, { depth: v }),
+  });
+  // Stepped knob: its value is an index into FX_BEATS (½ ¾ 1 2 4), snapped to the nearest step.
+  beatsKnob = knob(`${id}.fx-beats`, beatsEl, {
+    label: 'BEAT 1', min: 0, max: steps, value: FX_BEATS.indexOf(1),
+    onChange: (v) => {
+      const i = Math.round(v);
+      mixer.setFx(id, { beats: FX_BEATS[i] });
+      if (!beatsKnob) return;
+      beatsKnob.dial.style.setProperty('--rot', `${-135 + (i / steps) * 270}deg`);
+      refreshBeats();
+    },
+  });
+  refreshBeats();
+}
+
+function updateCueAvailability() {
+  const { channels, cueAvailable } = mixer.outputInfo();
+  for (const b of $$('.mix-col .pfl')) {
+    b.disabled = !cueAvailable;
+    b.title = cueAvailable
+      ? `Headphone cue (PFL) for channel ${b.closest('.mix-col').dataset.ch}, heard on outputs 3/4`
+      : 'Headphone cue needs a 4-channel audio output (e.g. a DJ controller). Choose one in Settings → Audio output.';
+  }
+  $('.master-col .cue-knobs').classList.toggle('inactive', !cueAvailable);
+  $('#outputNote').textContent = cueAvailable
+    ? `${channels}-channel output: master on 1/2, headphone cue on 3/4.`
+    : `${channels}-channel output: master only. Headphone cue needs a 4-channel device (e.g. a DJ controller).`;
+}
+
+// ---------- settings: audio output ----------
+
+function setupOutputSettings() {
+  const sel = $('#outputSelect');
+  const namesBtn = $('#outputNames');
+  if (typeof ctx.setSinkId !== 'function' || !navigator.mediaDevices?.enumerateDevices) {
+    sel.disabled = true;
+    sel.title = "Output selection isn't supported in this browser";
+    $('#outputUnsupported').hidden = false;
+    return;
+  }
+  const refresh = async () => {
+    let devices = [];
+    try { devices = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === 'audiooutput'); } catch { /* ignore */ }
+    const current = typeof ctx.sinkId === 'string' ? ctx.sinkId : '';
+    const outs = devices.filter((d) => d.deviceId && d.deviceId !== 'default');
+    sel.innerHTML = '<option value="">System default</option>' + outs.map((d, i) => (
+      `<option value="${esc(d.deviceId)}">${esc(d.label || `Output ${i + 1}`)}</option>`)).join('');
+    sel.value = outs.some((d) => d.deviceId === current) ? current : '';
+    namesBtn.hidden = !devices.length || devices.some((d) => d.label);
+  };
+  sel.addEventListener('change', async () => {
+    try {
+      await mixer.setOutputDevice(sel.value);
+      const { cueAvailable } = mixer.outputInfo();
+      toast(`Audio output: ${sel.selectedOptions[0].textContent}${cueAvailable ? ' · headphone cue on outputs 3/4' : ''}`);
+    } catch (err) {
+      toast(`Couldn't switch output: ${err.message}`);
+      refresh();
+    }
+    updateCueAvailability();
+  });
+  // Browsers hide device names until a media permission has been granted.
+  namesBtn.addEventListener('click', async () => {
+    try {
+      const s = await navigator.mediaDevices.getUserMedia({ audio: true });
+      s.getTracks().forEach((t) => t.stop());
+    } catch { toast('Permission denied, device names stay hidden'); }
+    refresh();
+  });
+  navigator.mediaDevices.addEventListener?.('devicechange', refresh);
+  $('#settingsBtn').addEventListener('click', refresh);
+  refresh();
 }
 
 // ---------- recording ----------

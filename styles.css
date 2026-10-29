@@ -236,3 +236,31 @@ kbd { background: #000; border: 1px solid #444; border-bottom-width: 2px; border
   .deck-bpm { min-width: 0; }
   .track-table th:nth-child(5), .track-table td:nth-child(5) { display: none; }
 }
+
+/* Mixer FX & cue */
+.fx { display: flex; flex-direction: column; align-items: center; gap: 3px; width: 100%; padding: 4px 0 2px; border-top: 1px solid var(--line); }
+.fx-row { display: flex; align-items: center; justify-content: center; gap: 4px; width: 100%; }
+.fx-type {
+  flex: 1 1 auto; min-width: 0; max-width: 72px; background: #0e1015; border: 1px solid var(--line); border-radius: 4px;
+  font-size: 10px; padding: 1px 2px; height: 20px; cursor: pointer;
+}
+.fx-on, .pfl {
+  background: var(--panel-2); border: 1px solid var(--line); border-radius: 4px; cursor: pointer;
+  font-size: 9px; font-weight: 800; letter-spacing: .06em; padding: 0 5px; height: 20px; color: var(--muted);
+}
+.fx-on.on, .pfl.on { background: var(--c, #fff); border-color: var(--c, #fff); color: #000; }
+.pfl:disabled { opacity: .35; cursor: not-allowed; }
+.fx-knob .knob-dial { width: 26px; height: 26px; }
+.fx-knob .knob-ind { height: 8px; top: 2px; }
+.fx-knob .knob-label { font-size: 8px; letter-spacing: .04em; white-space: nowrap; }
+.fx-knob { min-width: 38px; }
+.knob-slot.inactive, .cue-knobs.inactive { opacity: .45; }
+.ch-foot { display: flex; align-items: center; gap: 6px; }
+.mix-col[data-ch="B"] .ch-foot { flex-direction: row-reverse; }
+.cue-knobs { display: flex; flex-direction: column; align-items: center; gap: 4px; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line); }
+.master-col .knob-label { white-space: nowrap; }
+dialog select { background: #0e1015; border: 1px solid var(--line); border-radius: 6px; padding: 8px; }
+.output-note { margin: 6px 0 0; }
+.warn-text { color: var(--warn); }
+.mix-cols .mix-col { gap: 2px; }
+.mix-cols .ch-fader { height: 96px; }

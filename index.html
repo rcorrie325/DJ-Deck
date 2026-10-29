@@ -45,14 +45,35 @@
           <div class="knob-slot" data-k="mid"></div>
           <div class="knob-slot" data-k="low"></div>
           <div class="knob-slot filter" data-k="filter"></div>
+          <div class="fx">
+            <div class="fx-row">
+              <select class="fx-type" title="Channel A effect" aria-label="Channel A effect">
+                <option value="echo">Echo</option>
+                <option value="reverb">Reverb</option>
+                <option value="flanger">Flanger</option>
+              </select>
+              <button class="fx-on" title="Channel A effect on/off" aria-pressed="false">FX</button>
+            </div>
+            <div class="fx-row">
+              <div class="knob-slot fx-knob" data-k="fx-depth"></div>
+              <div class="knob-slot fx-knob" data-k="fx-beats"></div>
+            </div>
+          </div>
           <div class="fader-wrap">
             <div class="ch-meter"><div class="ch-meter-fill" id="meterA"></div></div>
             <input type="range" class="ch-fader" id="faderA" min="0" max="1" step="0.001" value="0.85" orient="vertical">
           </div>
-          <div class="ch-label">A</div>
+          <div class="ch-foot">
+            <button class="pfl" title="Headphone cue (PFL) for channel A" aria-pressed="false">CUE</button>
+            <div class="ch-label">A</div>
+          </div>
         </div>
         <div class="mix-col master-col">
           <div class="knob-slot" data-k="master"></div>
+          <div class="cue-knobs">
+            <div class="knob-slot" data-k="cue-mix"></div>
+            <div class="knob-slot" data-k="phones"></div>
+          </div>
         </div>
         <div class="mix-col" data-ch="B">
           <div class="knob-slot" data-k="trim"></div>
@@ -60,11 +81,28 @@
           <div class="knob-slot" data-k="mid"></div>
           <div class="knob-slot" data-k="low"></div>
           <div class="knob-slot filter" data-k="filter"></div>
+          <div class="fx">
+            <div class="fx-row">
+              <select class="fx-type" title="Channel B effect" aria-label="Channel B effect">
+                <option value="echo">Echo</option>
+                <option value="reverb">Reverb</option>
+                <option value="flanger">Flanger</option>
+              </select>
+              <button class="fx-on" title="Channel B effect on/off" aria-pressed="false">FX</button>
+            </div>
+            <div class="fx-row">
+              <div class="knob-slot fx-knob" data-k="fx-depth"></div>
+              <div class="knob-slot fx-knob" data-k="fx-beats"></div>
+            </div>
+          </div>
           <div class="fader-wrap">
             <div class="ch-meter"><div class="ch-meter-fill" id="meterB"></div></div>
             <input type="range" class="ch-fader" id="faderB" min="0" max="1" step="0.001" value="0.85" orient="vertical">
           </div>
-          <div class="ch-label">B</div>
+          <div class="ch-foot">
+            <button class="pfl" title="Headphone cue (PFL) for channel B" aria-pressed="false">CUE</button>
+            <div class="ch-label">B</div>
+          </div>
         </div>
       </div>
       <div class="xfader-wrap">
@@ -120,6 +158,11 @@
         <input id="clientIdInput" placeholder="from developer.spotify.com/dashboard" autocomplete="off">
       </label>
       <p class="muted">Add this Redirect URI to your Spotify app:<br><code id="redirectUri"></code></p>
+      <label>Audio output
+        <select id="outputSelect"><option value="">System default</option></select>
+      </label>
+      <p class="muted tiny output-note"><span id="outputUnsupported" class="warn-text" hidden>Output selection isn't supported in this browser. </span><span id="outputNote"></span>
+        <button type="button" class="btn tiny" id="outputNames" hidden>Show device names</button></p>
       <menu><button class="btn" value="cancel">Close</button><button class="btn spotify" id="saveSettings" value="save">Save</button></menu>
     </form>
   </dialog>
