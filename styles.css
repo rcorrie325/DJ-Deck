@@ -264,3 +264,21 @@ dialog select { background: #0e1015; border: 1px solid var(--line); border-radiu
 .warn-text { color: var(--warn); }
 .mix-cols .mix-col { gap: 2px; }
 .mix-cols .ch-fader { height: 96px; }
+
+/* Deck engine */
+.hotcues .pad { padding: 7px 0; }
+.pad.hot.set[data-i="0"] { background: #ff4d4d; color: #000; }
+.pad.hot.set[data-i="1"] { background: #ffa53d; color: #000; }
+.pad.hot.set[data-i="2"] { background: #3dff8b; color: #000; }
+.pad.hot.set[data-i="3"] { background: #4da6ff; color: #000; }
+.pad.hot.set[data-i="4"] { background: #c06bff; color: #000; }
+.pad.hot.set[data-i="5"] { background: #ff5fcf; color: #000; }
+.pad.hot.set[data-i="6"] { background: #ffe14d; color: #000; }
+.pad.hot.set[data-i="7"] { background: #3de8e0; color: #000; }
+.loop-ctrl { grid-template-columns: 1fr 1fr 1.6fr 1fr 1fr; }
+.pad.lctl { padding: 6px 0; font-size: 11px; letter-spacing: .04em; min-width: 0; overflow: hidden; color: #b8f5cc; }
+.pad.lctl.on { background: #50ff8c; color: #000; border-color: #50ff8c; }
+.pad.reloop.set:not(.on) { border-color: #2f7a4a; }
+.pitch .keylock { width: 100%; font-weight: 700; letter-spacing: .05em; }
+.pitch .keylock.on { background: var(--c); color: #000; border-color: var(--c); }
+.pitch .range { width: 100%; }

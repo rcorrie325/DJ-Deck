@@ -97,7 +97,7 @@ function drawPlayhead(ctx, x, h, dpr) {
   ctx.fillRect(x - dpr, 0, 2 * dpr, h);
 }
 
-const HOT_COLORS = ['#ff4d4d', '#ffa53d', '#3dff8b', '#4da6ff'];
+export const HOT_COLORS = ['#ff4d4d', '#ffa53d', '#3dff8b', '#4da6ff', '#c06bff', '#ff5fcf', '#ffe14d', '#3de8e0'];
 
 function drawCueMarkers(ctx, deck, toX, h, dpr) {
   const s = 6 * dpr;
@@ -118,6 +118,16 @@ function drawCueMarkers(ctx, deck, toX, h, dpr) {
     ctx.font = `bold ${8 * dpr}px system-ui`;
     ctx.fillText(String(i + 1), x + 2 * dpr, h - 3 * dpr);
   });
+  // Pending manual loop-in point.
+  if (deck.loopInPoint != null) {
+    const x = toX(deck.loopInPoint);
+    ctx.fillStyle = '#50ff8c';
+    for (let y = 0; y < h; y += 6 * dpr) ctx.fillRect(x - dpr / 2, y, dpr, 3 * dpr);
+    ctx.fillRect(x, 0, s * 2.2, s * 1.6);
+    ctx.fillStyle = '#000';
+    ctx.font = `bold ${8 * dpr}px system-ui`;
+    ctx.fillText('IN', x + 2 * dpr, s * 1.6 - 2 * dpr);
+  }
 }
 
 export function drawOverview(canvas, deck) {
