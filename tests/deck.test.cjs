@@ -210,4 +210,60 @@ module.exports = {
     assert(page.errors.length === 0, `page errors: ${page.errors}`);
     await page.close();
   },
+
+  // Unlike the drift test, this checks reported positions against the rendered audio itself:
+  // each click heard in the output must line up with where the position reports say we are.
+  async 'reported position matches what is audible (offline render)'({ browser, baseUrl }) {
+    const page = await openApp(browser, baseUrl);
+    const r = await page.evaluate(async () => {
+      const { loadDeckWorklet } = await import('/js/deck.js');
+      const sr = 44100;
+      const src = new Float32Array(6 * sr);
+      // 5 ms 2 kHz bursts every 0.5 s starting at 0.25 s.
+      for (let t = 0.25; t < 6; t += 0.5) {
+        const s = Math.round(t * sr);
+        for (let i = 0; i < 220; i++) src[s + i] = 0.8 * Math.sin((2 * Math.PI * 2000 * i) / sr);
+      }
+      const out = {};
+      for (const keylock of [true, false]) {
+        const rate = 1.08;
+        const oc = new OfflineAudioContext(2, 5 * sr, sr);
+        await loadDeckWorklet(oc);
+        const reports = [];
+        const node = new AudioWorkletNode(oc, 'spindeck-deck', {
+          numberOfInputs: 0,
+          outputChannelCount: [2],
+          processorOptions: { commands: [
+            { type: 'load', channels: [src], sampleRate: sr, seq: 1 },
+            { type: 'keylock', on: keylock, seq: 2 },
+            { type: 'rate', rate, seq: 3 },
+            { type: 'play', pos: 0, seq: 4 },
+          ] },
+        });
+        node.port.onmessage = (e) => e.data.pos != null && reports.push(e.data);
+        node.connect(oc.destination);
+        const d = (await oc.startRendering()).getChannelData(0);
+        await new Promise((res) => setTimeout(res, 300)); // let the last port messages arrive
+        const errs = [];
+        for (let i = 0; i < d.length; i++) {
+          if (Math.abs(d[i]) <= 0.05) continue;
+          const tOut = i / sr;
+          const rep = reports.reduce((a, b) => (Math.abs(b.time - tOut) < Math.abs(a.time - tOut) ? b : a));
+          const pred = rep.pos + (tOut - rep.time) * rate;
+          const click = 0.25 + Math.round((pred - 0.25) / 0.5) * 0.5;
+          errs.push((pred - click) * 1000);
+          i += Math.round(0.3 * sr);
+        }
+        out[keylock ? 'keylock' : 'linear'] = { clicks: errs.length, maxErrMs: Math.max(...errs.map(Math.abs)) };
+      }
+      return out;
+    });
+    console.log(`      audible-position error: keylock ${r.keylock.maxErrMs.toFixed(2)} ms over ${r.keylock.clicks} clicks, `
+      + `linear ${r.linear.maxErrMs.toFixed(2)} ms over ${r.linear.clicks} clicks`);
+    for (const [mode, v] of Object.entries(r)) {
+      assert(v.clicks >= 8, `${mode}: expected at least 8 clicks in the render, got ${v.clicks}`);
+      assert(v.maxErrMs < 5, `${mode}: reported position is ${v.maxErrMs.toFixed(2)} ms off the audible click`);
+    }
+    await page.close();
+  },
 };
