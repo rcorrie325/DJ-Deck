@@ -41,20 +41,98 @@ So SpinDeck uses Spotify for what it legally and technically allows:
 on audio files you own. Build your set in Spotify, open the playlist in SpinDeck,
 and every track you have locally lights up ✓ and is ready to mix.
 
-## Setup
+## How to run it
 
-1. **Create a Spotify app** at <https://developer.spotify.com/dashboard>.
-   - Check **Web API** and **Web Playback SDK**.
-   - Add a **Redirect URI** that matches exactly where you host the app, e.g.
-     `http://127.0.0.1:8080/` for local use. Spotify doesn't accept `localhost`; use `127.0.0.1`.
-   - Copy the **Client ID**. No client secret is needed (the app uses the PKCE flow).
-2. **Run it locally:**
-   ```sh
-   python3 -m http.server 8080 --bind 127.0.0.1
-   ```
-   Open <http://127.0.0.1:8080/>.
-3. Click **⚙ Settings**, paste your Client ID, then **Connect Spotify**.
-   To skip that step for everyone, put the Client ID in `config.js`.
+You need two things: a web browser and a tiny local web server. Nothing gets
+installed into the app itself; there's no `npm install` and no build step.
+
+> **Don't just double-click `index.html`.** Browsers block the app's code when
+> it's opened as a file (`file://...`), and you'll get a blank page. It has to be
+> served by a web server, as in step 3.
+
+### 1. Get the code
+
+Either clone it:
+
+```sh
+git clone https://github.com/rcorrie325/Canvas-API-Pulls.git
+cd Canvas-API-Pulls
+git checkout claude/spotify-dj-app
+```
+
+or on GitHub choose the `claude/spotify-dj-app` branch, click **Code → Download ZIP**,
+unzip it, and open a terminal in the unzipped folder.
+
+### 2. Make sure you have Python (or Node.js)
+
+Python is already installed on macOS and most Linux systems. Check with:
+
+```sh
+python3 --version
+```
+
+On Windows, install Python from <https://www.python.org/downloads/> and tick
+**"Add python.exe to PATH"** during setup. Then use `py` instead of `python3` below.
+
+### 3. Start the server
+
+From inside the project folder, run **one** of these:
+
+| You have | Command |
+| --- | --- |
+| Python (macOS / Linux) | `python3 -m http.server 8080 --bind 127.0.0.1` |
+| Python (Windows) | `py -m http.server 8080 --bind 127.0.0.1` |
+| Node.js | `npx serve -l tcp://127.0.0.1:8080` |
+
+Leave that terminal window open while you DJ. Press **Ctrl+C** in it to stop the server.
+
+### 4. Open the app
+
+Go to **<http://127.0.0.1:8080/>** in **Chrome or Edge**. Those are the browsers
+it has been tested in. Firefox and Safari should work but haven't been tested.
+
+Use `127.0.0.1`, not `localhost`. Spotify login only accepts `127.0.0.1`.
+
+### 5. Add music and play
+
+1. Click **＋ Add files** or **＋ Add folder** in the bottom-left, or drag audio files onto the track list.
+2. Click **A** or **B** next to a track to load it onto a deck. It takes a moment to analyze the BPM.
+3. Press play (▶), bring up the channel faders, and use the crossfader to blend.
+
+Press **?** in the top bar to see the keyboard shortcuts.
+
+**No music files yet?** These sites have free, legal tracks you can download to try it out:
+- Free Music Archive: <https://freemusicarchive.org>
+- Kevin MacLeod / Incompetech: <https://incompetech.com/music/royalty-free/> (CC-BY)
+- ccMixter: <https://ccmixter.org>
+- Pixabay Music: <https://pixabay.com/music/>
+
+Check each track's license before you use it in a public mix.
+
+### 6. (Optional) Connect Spotify
+
+Spotify only lets you browse your playlists, Liked Songs and search, and preview
+songs. It doesn't make Spotify songs mixable (see the section above).
+
+1. Go to <https://developer.spotify.com/dashboard> and click **Create app**.
+   - Under APIs, tick **Web API** and **Web Playback SDK**.
+   - Add the Redirect URI **`http://127.0.0.1:8080/`**, typed exactly like that, including the trailing `/`.
+   - Save, then copy the app's **Client ID**. You don't need the client secret.
+2. In SpinDeck, click **⚙** (top right), paste the Client ID, click **Save**.
+3. Click **Connect Spotify** and log in. Your playlists appear in the left sidebar.
+
+To skip step 2 for everyone who uses your copy, put the Client ID in `config.js`.
+
+### Troubleshooting
+
+| Problem | Fix |
+| --- | --- |
+| Blank page | You opened `index.html` directly. Start the server (step 3) and use the `http://127.0.0.1:8080/` address. |
+| "Address already in use" | Port 8080 is taken. Use another port, e.g. `8081`, and open `http://127.0.0.1:8081/`. If you use Spotify, add that address as a Redirect URI too. |
+| No sound | Click anywhere on the page once (browsers block audio until you interact), check the channel fader is up, and check the crossfader isn't all the way to the other side. |
+| Spotify says "INVALID_CLIENT: Invalid redirect URI" | The Redirect URI in your Spotify dashboard must match the address in your browser exactly, including `http://`, the port and the trailing `/`. |
+| Spotify login works for you but not friends | See "Letting other people log in" below. |
+| A file won't load | The browser can't decode that format. MP3, WAV, AAC/M4A and OGG work everywhere; FLAC works in Chrome, Edge and Firefox. |
 
 ### Letting other people log in
 
