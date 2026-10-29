@@ -1,0 +1,13 @@
+{
+  "name": "spindeck",
+  "private": true,
+  "description": "Browser DJ app with Spotify login",
+  "scripts": {
+    "start": "python3 -m http.server 8080 --bind 127.0.0.1",
+    "test": "node tests/run.cjs",
+    "fetch-music": "sh tests/fetch-music.sh"
+  },
+  "devDependencies": {
+    "playwright": "1.63.0"
+  }
+}

@@ -51,26 +51,42 @@ export async function analyzeTrack(buffer) {
   for (const p of peaks) for (let i = 0; i < p.length; i++) if (p[i] > globalMax) globalMax = p[i];
   for (const p of peaks) for (let i = 0; i < p.length; i++) p[i] /= globalMax;
 
-  const { bpm, firstBeat } = detectBpm(bands[0], ANALYSIS_RATE);
+  const { bpm, firstBeat } = detectBpm(bands, ANALYSIS_RATE);
   return { peaks, binRate: BIN_RATE, bpm, firstBeat };
 }
 
-// Onset envelope from the low band, then autocorrelation over tempo candidates.
-export function detectBpm(data, sampleRate) {
-  const hop = 128;
-  const envRate = sampleRate / hop;
-  const frames = Math.floor(data.length / hop);
-  if (frames < envRate * 4) return { bpm: null, firstBeat: 0 };
-
-  const energy = new Float32Array(frames);
+// Positive change in log energy per frame: rises sharply at note/drum attacks.
+function onsetEnvelope(data, hop, frames) {
+  const env = new Float32Array(frames);
+  let prev = 0;
+  let total = 0;
   for (let f = 0; f < frames; f++) {
     let sum = 0;
     for (let j = f * hop, end = j + hop; j < end; j++) sum += data[j] * data[j];
-    energy[f] = Math.sqrt(sum / hop);
+    const e = Math.log1p(1000 * Math.sqrt(sum / hop));
+    if (f > 0) env[f] = Math.max(0, e - prev);
+    total += env[f];
+    prev = e;
   }
-  // Positive energy change = onset strength.
+  const mean = total / frames || 1;
+  for (let f = 0; f < frames; f++) env[f] /= mean;
+  return env;
+}
+
+// Onset envelope summed over the frequency bands (so bass lines, kicks and
+// hi-hats all count), then autocorrelation over tempo candidates.
+export function detectBpm(bands, sampleRate) {
+  if (!Array.isArray(bands)) bands = [bands];
+  const hop = 128;
+  const envRate = sampleRate / hop;
+  const frames = Math.floor(bands[0].length / hop);
+  if (frames < envRate * 4) return { bpm: null, firstBeat: 0 };
+
   const env = new Float32Array(frames);
-  for (let f = 1; f < frames; f++) env[f] = Math.max(0, energy[f] - energy[f - 1]);
+  for (const band of bands) {
+    const e = onsetEnvelope(band, hop, frames);
+    for (let f = 0; f < frames; f++) env[f] += e[f];
+  }
   let mean = 0;
   for (let f = 0; f < frames; f++) mean += env[f];
   mean /= frames;
