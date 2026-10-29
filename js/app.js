@@ -1,8 +1,9 @@
 import { Deck } from './deck.js';
 import { Mixer, peakLevel, FX_BEATS } from './mixer.js';
-import { Library } from './library.js';
+import { Library, trackRecord, trackKey, filesFromDirectory } from './library.js';
 import { Spotify } from './spotify.js';
-import { analyzeTrack } from './analysis.js';
+import { analyzeTrack, shiftCamelot, camelotCompatible } from './analysis.js';
+import { Store } from './store.js';
 import { drawZoom, drawOverview } from './waveform.js';
 import { Knob } from './knob.js';
 import { Midi } from './midi.js';
@@ -14,15 +15,20 @@ const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
 const ctx = new AudioContext({ latencyHint: 'interactive' });
 const mixer = new Mixer(ctx);
 const decks = { A: new Deck(ctx, 'A', mixer.input('A')), B: new Deck(ctx, 'B', mixer.input('B')) };
-const library = new Library();
+const store = new Store();
+const library = new Library(store);
 const spotify = new Spotify();
 const trackIndex = new Map(); // id -> track (local and Spotify)
 const playlistCache = new Map();
 const ZOOMS = [2, 4, 6, 8, 12, 16, 24];
 let zoomIdx = 3;
 let crate = { key: 'local', title: 'Local Files', tracks: [] };
+let userCrates = []; // saved crates: { id, name, trackIds: [fingerprint] }
+const missingStubs = new Map(); // fingerprint -> placeholder row for a crate track whose file isn't loaded
+const libStats = { analyzed: 0 }; // analyzeTrack calls this session (tests check the cache is used)
 
 window.spindeck = { ctx, mixer, decks, library, spotify }; // handy for debugging in the console
+Object.assign(window.spindeck, { store, libStats });
 
 document.addEventListener('pointerdown', () => ctx.state !== 'running' && ctx.resume(), true);
 document.addEventListener('keydown', () => ctx.state !== 'running' && ctx.resume(), true);
@@ -63,7 +69,7 @@ function deckTemplate(id) {
       <div class="deck-artist">&nbsp;</div>
       <div class="deck-times"><span class="t-el">0:00.0</span><span class="t-rem">-0:00.0</span></div>
     </div>
-    <div class="deck-bpm"><b class="bpm-val">--.-</b><span class="bpm-unit">BPM</span><span class="pitch-val">+0.00%</span></div>
+    <div class="deck-bpm"><b class="bpm-val">--.-</b><span class="bpm-unit">BPM</span><span class="pitch-val">+0.00%</span><span class="deck-key" title="Musical key (Camelot)"></span></div>
   </div>
   <canvas class="overview" title="Click to jump"></canvas>
   <div class="deck-body">
@@ -112,6 +118,7 @@ function setupDeck(id) {
     rem: $('.t-rem', root),
     bpm: $('.bpm-val', root),
     pitchVal: $('.pitch-val', root),
+    key: $('.deck-key', root),
     play: $('.play', root),
     cue: $('.cue', root),
     sync: $('.sync', root),
@@ -235,6 +242,11 @@ function updateDeckUI(id) {
   const pct = (deck.rate - 1) * 100;
   ui.pitchVal.textContent = `${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%`;
   ui.bpm.textContent = deck.currentBpm ? deck.currentBpm.toFixed(1) : '--.-';
+  // Without key lock, changing tempo shifts the key too.
+  const key = deck.analysis?.key;
+  const shift = deck.keylock ? 0 : 12 * Math.log2(deck.rate);
+  ui.key.textContent = key ? shiftCamelot(key, shift).camelot : '';
+  ui.key.classList.toggle('shifted', !!key && Math.round(shift) !== 0);
   const o = decks[id === 'A' ? 'B' : 'A'];
   const synced = deck.currentBpm && o.currentBpm && Math.abs(deck.currentBpm - o.currentBpm) < 0.05;
   ui.sync.classList.toggle('on', !!synced);
@@ -251,6 +263,10 @@ async function loadToDeck(id, track) {
     if (track.art && !match.art) match.art = track.art;
     track = match;
   }
+  if (track.source === 'missing') {
+    toast(`“${track.title}” isn't in this session's library — add its file${$('#reconnectBtn').hidden ? '' : ' or reconnect your library'} first.`, 5000);
+    return;
+  }
   if (deck.playing) {
     toast(`Deck ${id} is playing — pause it before loading a new track`);
     return;
@@ -262,12 +278,20 @@ async function loadToDeck(id, track) {
   try {
     const buffer = await ctx.decodeAudioData(await track.file.arrayBuffer());
     if (!track.analysis) {
+      libStats.analyzed++;
       track.analysis = await analyzeTrack(buffer);
       // Fall back to a tagged BPM only when detection found nothing.
       if (!track.analysis.bpm && track.bpm) track.analysis.bpm = track.bpm;
       track.bpm = track.analysis.bpm;
+      if (track.fp) store.putTrack(trackRecord(track)).catch(console.warn);
     }
-    await deck.load(buffer, track, track.analysis);
+    deckLoading[id] = true;
+    try {
+      await deck.load(buffer, track, track.analysis); // track.cues are restored by the deck
+    } finally {
+      deckLoading[id] = false;
+    }
+    restoreCues(deck, track);
     ui.art.src = track.art || '';
     ui.art.hidden = !track.art;
     renderTracks();
@@ -278,6 +302,89 @@ async function loadToDeck(id, track) {
   } finally {
     ui.loading.hidden = true;
   }
+}
+
+// ---------- cue persistence & key matching ----------
+
+const deckLoading = { A: false, B: false };
+const cueTimers = new Map();
+
+const cuesOf = (deck) => ({ cuePoint: deck.cuePoint, hotCues: deck.hotCues.slice() });
+
+// Fallback for decks whose load() doesn't apply track.cues itself: apply them here.
+function restoreCues(deck, track) {
+  const c = track.cues;
+  if (!c || deck.track !== track) return;
+  const hot = c.hotCues || [];
+  const same = (a, b) => (a == null ? b == null : b != null && Math.abs(a - b) < 1e-6);
+  const applied = (c.cuePoint == null || same(deck.cuePoint, c.cuePoint))
+    && deck.hotCues.every((v, i) => same(hot[i] ?? null, v));
+  if (applied) return;
+  for (let i = 0; i < deck.hotCues.length; i++) deck.hotCues[i] = hot[i] ?? null;
+  if (c.cuePoint != null) {
+    deck.cuePoint = c.cuePoint;
+    if (!deck.playing) deck.seek(c.cuePoint);
+  }
+  deck.dispatchEvent(new Event('change'));
+}
+
+// Save cue changes to the loaded track's saved record (debounced per track).
+function rememberCues(id) {
+  const deck = decks[id];
+  const t = deck.track;
+  if (!t?.fp || deckLoading[id] || !deck.hotCues) return;
+  const cues = cuesOf(deck);
+  const json = JSON.stringify(cues);
+  if (json === JSON.stringify(t.cues)) return;
+  t.cues = cues;
+  clearTimeout(cueTimers.get(t.fp));
+  cueTimers.set(t.fp, setTimeout(() => {
+    cueTimers.delete(t.fp);
+    store.updateTrack(t.fp, { cues: t.cues }).catch(console.warn);
+  }, 400));
+}
+
+// Key of a deck as heard: shifted by the tempo change unless the deck has key lock on.
+function deckKey(deck) {
+  const k = deck.analysis?.key || trackKey(deck.track);
+  if (!k) return null;
+  return deck.keylock ? k.camelot : shiftCamelot(k.camelot, 12 * Math.log2(deck.rate || 1));
+}
+
+let keyRefSig = '';
+function playingKeys() {
+  return Object.values(decks).filter((d) => d.playing).map(deckKey).filter(Boolean);
+}
+const isKeyMatch = (camelot, refs) => !!camelot && refs.some((r) => camelotCompatible(camelot, r));
+
+// Re-highlight rows only when the reference keys actually change (deck 'change' fires often).
+function updateKeyMatches(force = false) {
+  const refs = playingKeys();
+  const sig = refs.join(',');
+  if (!force && sig === keyRefSig) return;
+  keyRefSig = sig;
+  $$('#trackBody tr').forEach((row) => row.classList.toggle('key-match', isKeyMatch(row.dataset.key, refs)));
+}
+
+function setupLibraryDeckHooks() {
+  for (const id of ['A', 'B']) {
+    decks[id].addEventListener('change', () => {
+      rememberCues(id);
+      updateKeyMatches();
+    });
+  }
+  // Flush pending cue saves when the page is hidden or goes away.
+  const flush = () => {
+    for (const d of Object.values(decks)) {
+      const t = d.track;
+      if (!t?.fp || !cueTimers.has(t.fp)) continue;
+      clearTimeout(cueTimers.get(t.fp));
+      cueTimers.delete(t.fp);
+      store.updateTrack(t.fp, { cues: t.cues }).catch(console.warn);
+    }
+  };
+  addEventListener('pagehide', flush);
+  document.addEventListener('visibilitychange', () => document.visibilityState === 'hidden' && flush());
 }
 
 // ---------- mixer ----------
@@ -472,6 +579,10 @@ async function addFiles(files) {
   added.forEach((t) => trackIndex.set(t.id, t));
   $('#localCount').textContent = library.tracks.length;
   if (crate.key === 'local') crate.tracks = library.tracks;
+  if (crate.key.startsWith('crate:') && added.length) {
+    const c = userCrates.find((x) => 'crate:' + x.id === crate.key);
+    if (c) crate.tracks = crateTracks(c);
+  }
   el.textContent = crate.title;
   renderTracks();
   if (added.length) toast(`Added ${added.length} track${added.length === 1 ? '' : 's'}`);
@@ -482,6 +593,7 @@ function selectCrate(key, title, tracks) {
   crate = { key, title, tracks };
   $$('.crate').forEach((c) => c.classList.toggle('active', c.dataset.crate === key));
   $('#crateTitle').textContent = title;
+  $('#saveCrateBtn').hidden = !(key === 'liked' || key.startsWith('pl:'));
   renderTracks();
 }
 
@@ -492,34 +604,309 @@ function renderTracks() {
     ? list.filter((t) => `${t.title} ${t.artist} ${t.album}`.toLowerCase().includes(q))
     : list;
   const loadedIds = new Set(Object.values(decks).map((d) => d.track?.id));
+  const refs = playingKeys();
+  keyRefSig = refs.join(',');
+  const inUserCrate = crate.key.startsWith('crate:');
   $('#emptyState').hidden = rows.length > 0;
   $('#emptyState').textContent = crate.key === 'local'
     ? 'Drop audio files or a folder here, or use “Add files”.'
-    : 'No tracks.';
+    : inUserCrate ? 'Empty crate — drag tracks from your library onto it in the sidebar.' : 'No tracks.';
   $('#trackBody').innerHTML = rows.map((t) => {
     const match = t.source === 'spotify' ? library.findMatch(t) : t;
     const bpm = match?.bpm ? match.bpm.toFixed(1) : '';
+    const key = trackKey(match);
+    const camelot = key?.camelot || '';
     const art = t.art ? `<img src="${esc(t.art)}" alt="" loading="lazy">` : '<span class="note">♪</span>';
     const local = t.source === 'spotify'
       ? (match ? '<span class="ok" title="Matched a local file">✓</span>' : '<span class="miss" title="No local file">—</span>')
-      : '<span class="ok">●</span>';
+      : t.source === 'missing'
+        ? '<span class="miss" title="File not added this session">—</span>'
+        : '<span class="ok">●</span>';
     const preview = t.source === 'spotify' ? `<button class="btn tiny pv" data-act="preview" title="Preview on Spotify">▶</button>` : '';
-    return `<tr draggable="true" data-id="${esc(t.id)}" class="${loadedIds.has(match?.id) ? 'loaded' : ''} ${t.source === 'spotify' && !match ? 'unmatched' : ''}">
+    const remove = inUserCrate ? '<button class="btn tiny" data-act="remove" title="Remove from crate">×</button>' : '';
+    const cls = [
+      loadedIds.has(match?.id) && 'loaded',
+      ((t.source === 'spotify' && !match) || t.source === 'missing') && 'unmatched',
+      isKeyMatch(camelot, refs) && 'key-match',
+    ].filter(Boolean).join(' ');
+    return `<tr draggable="true" data-id="${esc(t.id)}" data-key="${camelot}" class="${cls}">
       <td class="art">${art}</td>
       <td class="title">${esc(t.title)}</td>
       <td>${esc(t.artist)}</td>
       <td class="num">${bpm}</td>
+      <td class="key" title="${esc(key?.name || '')}">${camelot}</td>
       <td class="num">${fmtTime(t.duration, false)}</td>
       <td class="center">${local}</td>
-      <td class="load">${preview}<button class="btn tiny" data-act="A">A</button><button class="btn tiny" data-act="B">B</button></td>
+      <td class="load">${preview}${remove}<button class="btn tiny" data-act="A">A</button><button class="btn tiny" data-act="B">B</button></td>
     </tr>`;
   }).join('');
+}
+
+// ---------- saved library: crates & folders ----------
+
+const trackFp = (t) => (t?.source === 'spotify' ? library.findMatch(t)?.fp : t?.fp) || null;
+
+function crateTracks(c) {
+  return c.trackIds.map((fp) => library.byFp.get(fp) || missingStubs.get(fp) || stubFor(fp, null));
+}
+
+function stubFor(fp, rec) {
+  const name = fp.split('|')[0];
+  const stub = {
+    id: 'missing:' + fp, fp, source: 'missing',
+    title: rec?.title || name, artist: rec?.artist || '', album: rec?.album || '',
+    duration: rec?.duration || 0, bpm: rec?.bpm || null, tagKey: rec?.tagKey || null,
+    analysis: rec?.analysis?.key ? { key: rec.analysis.key } : null,
+  };
+  if (rec) missingStubs.set(fp, stub);
+  trackIndex.set(stub.id, stub);
+  return stub;
+}
+
+async function openUserCrate(id) {
+  const c = userCrates.find((x) => x.id === id);
+  if (!c) return;
+  // Fill in saved details for tracks whose files aren't in this session's library.
+  await Promise.all(c.trackIds.filter((fp) => !library.byFp.has(fp) && !missingStubs.has(fp)).map(async (fp) => {
+    stubFor(fp, await store.getTrack(fp).catch(() => null));
+  }));
+  selectCrate('crate:' + c.id, c.name, crateTracks(c));
+}
+
+function renderUserCrates() {
+  $('#userCrates').innerHTML = userCrates.map((c) => `
+    <div class="crate user-crate${crate.key === 'crate:' + c.id ? ' active' : ''}" role="button" tabindex="0"
+      data-crate="crate:${esc(c.id)}" data-id="${esc(c.id)}" title="Drop tracks here · double-click to rename">
+      <span class="crate-name">▣ ${esc(c.name)}</span>
+      <span class="crate-side"><span class="count">${c.trackIds.length}</span><button class="crate-del" title="Delete crate" aria-label="Delete crate ${esc(c.name)}">×</button></span>
+    </div>`).join('');
+}
+
+const saveCrate = (c) => store.putCrate(c).catch((err) => toast(`Couldn't save crate: ${err.message}`));
+
+async function createCrate(name, trackIds = []) {
+  const base = name || 'New crate';
+  let unique = base;
+  for (let n = 2; userCrates.some((c) => c.name === unique); n++) unique = `${base} ${n}`;
+  const c = { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), name: unique, trackIds: [...new Set(trackIds)] };
+  userCrates.push(c);
+  await saveCrate(c);
+  renderUserCrates();
+  return c;
+}
+
+async function addToCrate(crateId, fps) {
+  const c = userCrates.find((x) => x.id === crateId);
+  if (!c) return 0;
+  const fresh = fps.filter((fp) => fp && !c.trackIds.includes(fp));
+  if (!fresh.length) return 0;
+  c.trackIds.push(...fresh);
+  await saveCrate(c);
+  renderUserCrates();
+  if (crate.key === 'crate:' + c.id) { crate.tracks = crateTracks(c); renderTracks(); }
+  return fresh.length;
+}
+
+async function removeFromCrate(crateId, fp) {
+  const c = userCrates.find((x) => x.id === crateId);
+  if (!c) return;
+  c.trackIds = c.trackIds.filter((x) => x !== fp);
+  await saveCrate(c);
+  renderUserCrates();
+  if (crate.key === 'crate:' + c.id) { crate.tracks = crateTracks(c); renderTracks(); }
+}
+
+async function renameCrate(crateId, name) {
+  const c = userCrates.find((x) => x.id === crateId);
+  name = name.trim();
+  if (!c || !name || name === c.name) return renderUserCrates();
+  c.name = name;
+  await saveCrate(c);
+  renderUserCrates();
+  if (crate.key === 'crate:' + c.id) { crate.title = name; $('#crateTitle').textContent = name; }
+}
+
+async function deleteCrate(crateId) {
+  userCrates = userCrates.filter((x) => x.id !== crateId);
+  await store.deleteCrate(crateId).catch(console.warn);
+  if (crate.key === 'crate:' + crateId) selectCrate('local', 'Local Files', library.tracks);
+  renderUserCrates();
+}
+
+function startRename(el) {
+  const c = userCrates.find((x) => x.id === el.dataset.id);
+  if (!c || el.querySelector('input')) return;
+  const input = document.createElement('input');
+  input.className = 'crate-rename';
+  input.value = c.name;
+  input.setAttribute('aria-label', 'Crate name');
+  el.querySelector('.crate-name').replaceWith(input);
+  input.focus();
+  input.select();
+  let done = false;
+  const finish = (commit) => {
+    if (done) return;
+    done = true;
+    if (commit) renameCrate(c.id, input.value); else renderUserCrates();
+  };
+  input.addEventListener('keydown', (e) => {
+    e.stopPropagation();
+    if (e.key === 'Enter') finish(true);
+    if (e.key === 'Escape') finish(false);
+  });
+  input.addEventListener('blur', () => finish(true));
+  input.addEventListener('click', (e) => e.stopPropagation());
+  input.addEventListener('dblclick', (e) => e.stopPropagation());
+}
+
+function setupCrates() {
+  const box = $('#userCrates');
+  $('#newCrateBtn').addEventListener('click', async () => {
+    const c = await createCrate();
+    const el = box.querySelector(`[data-id="${CSS.escape(c.id)}"]`);
+    if (el) startRename(el);
+  });
+  box.addEventListener('click', (e) => {
+    const el = e.target.closest('.user-crate');
+    if (!el) return;
+    if (e.target.closest('.crate-del')) {
+      const c = userCrates.find((x) => x.id === el.dataset.id);
+      if (c && confirm(`Delete the crate “${c.name}”? The tracks stay in your library.`)) deleteCrate(c.id);
+      return;
+    }
+    openUserCrate(el.dataset.id);
+  });
+  box.addEventListener('keydown', (e) => {
+    const el = e.target.closest('.user-crate');
+    if (el && e.target === el && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); openUserCrate(el.dataset.id); }
+    if (el && e.target === el && e.key === 'F2') startRename(el);
+  });
+  box.addEventListener('dblclick', (e) => {
+    const el = e.target.closest('.user-crate');
+    if (el && !e.target.closest('.crate-del')) startRename(el);
+  });
+  // Drop library rows onto a crate.
+  const hasTrack = (e) => e.dataTransfer?.types.includes('text/spindeck-track');
+  box.addEventListener('dragover', (e) => {
+    const el = e.target.closest('.user-crate');
+    if (!el || !hasTrack(e)) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+    $$('.user-crate.drop', box).forEach((x) => x !== el && x.classList.remove('drop'));
+    el.classList.add('drop');
+  });
+  box.addEventListener('dragleave', (e) => {
+    const el = e.target.closest('.user-crate');
+    if (el && !el.contains(e.relatedTarget)) el.classList.remove('drop');
+  });
+  box.addEventListener('drop', async (e) => {
+    const el = e.target.closest('.user-crate');
+    if (!el || !hasTrack(e)) return;
+    e.preventDefault();
+    el.classList.remove('drop');
+    const t = trackIndex.get(e.dataTransfer.getData('text/spindeck-track'));
+    const fp = trackFp(t);
+    if (!fp) return toast('Only tracks with a local file can go in a crate');
+    const c = userCrates.find((x) => x.id === el.dataset.id);
+    const n = await addToCrate(el.dataset.id, [fp]);
+    toast(n ? `Added “${t.title}” to ${c.name}` : `“${t.title}” is already in ${c.name}`);
+  });
+
+  $('#saveCrateBtn').addEventListener('click', async () => {
+    const fps = [...new Set(crate.tracks.map(trackFp).filter(Boolean))];
+    if (!fps.length) return toast('None of these tracks match a local file yet — add the files first');
+    const c = await createCrate(crate.title, fps);
+    toast(`Saved crate “${c.name}” with ${fps.length} of ${crate.tracks.length} tracks`);
+  });
+}
+
+// Chrome/Edge: remember picked folders so the library can be re-imported after a reload.
+let pendingFolders = [];
+
+async function importFolders(entries) {
+  const files = [];
+  for (const entry of entries) {
+    try {
+      files.push(...await filesFromDirectory(entry.handle));
+    } catch (err) {
+      console.warn(err);
+      toast(`Couldn't read the folder “${entry.name}”: ${err.message}`);
+    }
+  }
+  if (files.length) await addFiles(files);
+}
+
+function showReconnect() {
+  const btn = $('#reconnectBtn');
+  btn.hidden = pendingFolders.length === 0;
+  btn.title = `Re-open your saved music folders: ${pendingFolders.map((f) => f.name).join(', ')}`;
+}
+
+async function pickFolder() {
+  let handle;
+  try {
+    handle = await window.showDirectoryPicker({ id: 'spindeck-music', mode: 'read' });
+  } catch (err) {
+    if (err.name !== 'AbortError') toast(`Couldn't open the folder: ${err.message}`);
+    return;
+  }
+  const saved = await store.getHandles().catch(() => []);
+  let entry = null;
+  for (const s of saved) if (await s.handle.isSameEntry?.(handle).catch(() => false)) entry = s;
+  if (!entry) {
+    entry = { id: Date.now().toString(36), name: handle.name, handle };
+    await store.putHandle(entry).catch((err) => console.warn('SpinDeck: could not remember folder', err));
+  }
+  pendingFolders = pendingFolders.filter((f) => f.id !== entry.id);
+  showReconnect();
+  await importFolders([entry]);
+}
+
+async function restoreFolders() {
+  const saved = await store.getHandles().catch(() => []);
+  const granted = [];
+  for (const entry of saved) {
+    const state = await entry.handle.queryPermission?.({ mode: 'read' }).catch(() => 'denied');
+    (state === 'granted' ? granted : pendingFolders).push(entry);
+  }
+  showReconnect();
+  if (granted.length) await importFolders(granted);
+}
+
+async function reconnectFolders() {
+  const ok = [];
+  for (const entry of pendingFolders) {
+    try {
+      if (await entry.handle.requestPermission({ mode: 'read' }) === 'granted') ok.push(entry);
+    } catch (err) { console.warn(err); }
+  }
+  pendingFolders = pendingFolders.filter((f) => !ok.includes(f));
+  showReconnect();
+  if (ok.length) await importFolders(ok);
+  else toast('Permission to read your music folder was not granted');
+}
+
+async function initSavedLibrary() {
+  userCrates = await store.getCrates().catch(() => []);
+  renderUserCrates();
+  if (window.showDirectoryPicker) await restoreFolders();
 }
 
 function setupLibrary() {
   $('#fileInput').addEventListener('change', (e) => { addFiles(e.target.files); e.target.value = ''; });
   $('#folderInput').addEventListener('change', (e) => { addFiles(e.target.files); e.target.value = ''; });
+  if (window.showDirectoryPicker) {
+    $('#folderInput').closest('label').addEventListener('click', (e) => {
+      e.preventDefault();
+      pickFolder();
+    });
+  }
+  $('#reconnectBtn').addEventListener('click', reconnectFolders);
   $('[data-crate="local"]').addEventListener('click', () => selectCrate('local', 'Local Files', library.tracks));
+  setupCrates();
+  setupLibraryDeckHooks();
+  window.spindeck.crates = { list: () => userCrates, create: createCrate, add: addToCrate, remove: removeFromCrate, open: openUserCrate };
+  window.spindeck.ready = initSavedLibrary().catch((err) => console.warn('SpinDeck: saved library', err));
 
   const body = $('#trackBody');
   body.addEventListener('click', (e) => {
@@ -528,6 +915,7 @@ function setupLibrary() {
     if (!btn || !row) return;
     const t = trackIndex.get(row.dataset.id);
     if (btn.dataset.act === 'preview') previewSpotify(t);
+    else if (btn.dataset.act === 'remove') removeFromCrate(crate.key.slice(6), trackFp(t));
     else loadToDeck(btn.dataset.act, t);
   });
   body.addEventListener('dblclick', (e) => {

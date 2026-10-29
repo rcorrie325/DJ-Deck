@@ -126,6 +126,9 @@
       <label class="crate add-files">＋ Add folder
         <input type="file" id="folderInput" webkitdirectory multiple hidden>
       </label>
+      <button id="reconnectBtn" class="crate reconnect" title="Re-open your saved music folders" hidden>⟳ Reconnect library</button>
+      <div class="crate-head crate-head-row"><span>Crates</span><button id="newCrateBtn" class="crate-new" title="Create a crate (drag tracks onto it)">＋ New crate</button></div>
+      <div id="userCrates" class="user-crates"></div>
       <div class="crate-head">Spotify</div>
       <div id="spotifyCrates" class="sp-crates">
         <p class="muted small-pad">Connect Spotify to browse your playlists and liked songs.</p>
@@ -135,6 +138,7 @@
       <div class="track-toolbar">
         <input id="searchInput" type="search" placeholder="Filter library… (Enter to search Spotify)">
         <span id="crateTitle" class="crate-title">Local Files</span>
+        <button id="saveCrateBtn" class="btn small" title="Save the matched local tracks as a crate" hidden>Save as crate</button>
         <div id="preview" class="preview" hidden>
           <img id="previewArt" alt="">
           <div class="preview-meta"><b id="previewTitle"></b><span id="previewArtist"></span></div>
@@ -144,7 +148,7 @@
       </div>
       <div class="table-wrap" id="dropZone">
         <table class="track-table">
-          <thead><tr><th></th><th>Title</th><th>Artist</th><th>BPM</th><th>Time</th><th>Local</th><th>Load</th></tr></thead>
+          <thead><tr><th></th><th>Title</th><th>Artist</th><th>BPM</th><th title="Camelot key (highlighted: mixes with the playing deck)">Key</th><th>Time</th><th>Local</th><th>Load</th></tr></thead>
           <tbody id="trackBody"></tbody>
         </table>
         <div id="emptyState" class="empty">Drop audio files or a folder here, or use “Add files”.</div>

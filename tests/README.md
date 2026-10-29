@@ -13,6 +13,7 @@ npm test              # run everything; `npm test -- music` runs one file
 | --- | --- |
 | `core.test.cjs` | BPM/first-beat detection on generated tracks with known answers, play, sync (tempo + phase), loops, hot cues, phone layout |
 | `spotify.test.cjs` | PKCE login, playlists, local matching and search against mocked Spotify endpoints |
+| `library.test.cjs` | Key detection on synthesized chords (and detected keys of the real tracks, informational), saved library restore of tags/analysis/cues after reload, crates, stored folder handles, Save as crate, library layout |
 | `music.test.cjs` | BPM and beat grid on real music (skipped until `fetch-music` has run) |
 
 Generated test tracks are written to `tests/.cache/`, and downloaded music to

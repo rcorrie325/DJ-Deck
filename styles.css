@@ -318,3 +318,45 @@ dialog select { background: #0e1015; border: 1px solid var(--line); border-radiu
 .midi-dialog input.midi-led { padding: 0; margin: 0; }
 .midi-dialog menu { flex-wrap: wrap; }
 .midi-import { display: inline-flex; align-items: center; }
+/* Library */
+.crate-head-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.crate-new {
+  background: none; border: 1px solid var(--line); border-radius: 5px; color: var(--muted);
+  font-size: 10px; letter-spacing: .05em; padding: 1px 6px; cursor: pointer; text-transform: none;
+}
+.crate-new:hover { color: var(--text); border-color: #444a58; }
+.crate.reconnect { color: var(--warn); }
+.crate.reconnect[hidden] { display: none; }
+.user-crate { gap: 6px; outline-offset: -2px; }
+.user-crate .crate-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.user-crate .crate-side { display: flex; align-items: center; gap: 4px; flex: none; }
+.crate-del {
+  background: none; border: 0; color: var(--muted); cursor: pointer; padding: 0 2px; line-height: 1;
+  font-size: 14px; opacity: 0; transition: opacity .1s;
+}
+.user-crate:hover .crate-del, .user-crate:focus-within .crate-del, .user-crate.active .crate-del { opacity: 1; }
+.crate-del:hover { color: var(--a); }
+.user-crate.drop { background: #17331f; box-shadow: inset 3px 0 var(--ok); }
+.crate-rename {
+  flex: 1; min-width: 0; background: #0e1015; border: 1px solid var(--b); border-radius: 4px;
+  padding: 1px 4px; user-select: text;
+}
+.track-table td.key { font-variant-numeric: tabular-nums; color: var(--muted); width: 1%; }
+.track-table tr.key-match td.key { color: var(--ok); font-weight: 700; }
+.track-table tr.key-match td.title { box-shadow: inset 3px 0 var(--ok); }
+@media (hover: none) { .crate-del { opacity: 1; } }
+@media (max-width: 640px) {
+  /* Keep the Key column; hide Time and the Local marker instead. */
+  .track-table th:nth-child(5), .track-table td:nth-child(5) { display: table-cell; }
+  .track-table th:nth-child(6), .track-table td:nth-child(6),
+  .track-table th:nth-child(7), .track-table td:nth-child(7) { display: none; }
+}
+@media (max-width: 1100px) {
+  /* Stacked layout: keep room for track rows below the crate list. */
+  .library .table-wrap { min-height: 220px; }
+  .library .crates { min-height: 160px; }
+}
+
+/* Deck key readout */
+.deck-key { font-weight: 700; font-variant-numeric: tabular-nums; color: var(--ok); min-height: 1.2em; }
+.deck-key.shifted { color: var(--warn); }

@@ -1,6 +1,7 @@
 // Cross-feature checks: a MIDI controller driving features built separately
 // (key lock, 8 hot cues, manual loops, mixer FX, headphone cue).
-const { generated, addFiles, loadDeck, assert, near } = require('./lib.cjs');
+const fs = require('fs');
+const { generated, addFiles, loadDeck, assert, near, openApp, MUSIC } = require('./lib.cjs');
 const { open, send, learn, done } = require('./midi-helpers.cjs');
 
 const press = async (page, note) => {
@@ -57,6 +58,29 @@ module.exports = {
     await send(page, [0xb0, 0x41, 127]);
     near((await state()).fx.depth, 1, 0.01, 'FX depth follows the controller knob');
 
+    assert(page.errors.length === 0, `page errors: ${page.errors}`);
+    await page.close();
+  },
+
+  async 'deck shows the musical key, shifted by tempo unless key lock is on'({ browser, baseUrl }) {
+    const file = `${MUSIC}/Kevin_MacLeod_-_Vibe_Ace.hq.ogg`;
+    if (!fs.existsSync(file)) return 'skip';
+    const page = await openApp(browser, baseUrl);
+    await addFiles(page, [file]);
+    await loadDeck(page, 1, 'A');
+    const readout = () => page.$eval('#deckA .deck-key', (e) => ({ text: e.textContent, shifted: e.classList.contains('shifted') }));
+    let r = await readout();
+    assert(r.text === '12B' && !r.shifted, `expected 12B (E major), got ${JSON.stringify(r)}`);
+    assert((await page.$eval('#trackBody tr', (e) => e.innerText)).includes('12B'), 'library Key column shows 12B');
+
+    // +1 semitone of tempo (rate 2^(1/12)) without key lock: E major -> F major = 7B.
+    await page.evaluate(() => window.spindeck.decks.A.setRate(2 ** (1 / 12)));
+    r = await readout();
+    assert(r.text === '7B' && r.shifted, `expected shifted 7B, got ${JSON.stringify(r)}`);
+
+    await page.click('#deckA .keylock');
+    r = await readout();
+    assert(r.text === '12B' && !r.shifted, `key lock should restore 12B, got ${JSON.stringify(r)}`);
     assert(page.errors.length === 0, `page errors: ${page.errors}`);
     await page.close();
   },
