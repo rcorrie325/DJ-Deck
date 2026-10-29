@@ -1,37 +1,74 @@
-// Local track library: file import, tag reading, and matching against Spotify tracks.
+// Local track library: file import, tag reading, saved-library restore and matching against Spotify tracks.
+import { ANALYSIS_VERSION, parseKey } from './analysis.js';
+import { fingerprint } from './store.js';
 
-const AUDIO_EXT = /\.(mp3|wav|flac|ogg|oga|m4a|aac|aif|aiff|opus|webm)$/i;
+export const AUDIO_EXT = /\.(mp3|wav|flac|ogg|oga|m4a|aac|aif|aiff|opus|webm)$/i;
 let nextId = 1;
 
+// What gets saved per track (keyed by the file fingerprint).
+export function trackRecord(t) {
+  return {
+    id: t.fp, title: t.title, artist: t.artist, album: t.album, duration: t.duration,
+    bpm: t.bpm, tagKey: t.tagKey || null, analysis: t.analysis || null, cues: t.cues || null,
+    addedAt: t.addedAt || Date.now(),
+  };
+}
+
+// Musical key to show for a track: the detected key, else the file's key tag.
+export const trackKey = (t) => t?.analysis?.key || t?.tagKey || null;
+
+export const usableAnalysis = (a) => (a && a.version === ANALYSIS_VERSION && a.peaks ? a : null);
+
 export class Library {
-  constructor() {
+  constructor(store = null) {
+    this.store = store;
     this.tracks = [];
     this.byId = new Map();
+    this.byFp = new Map();
   }
 
   async addFiles(fileList, onProgress) {
     const files = Array.from(fileList).filter((f) => AUDIO_EXT.test(f.name) || f.type.startsWith('audio/'));
     const added = [];
+    let done = 0;
     for (const file of files) {
-      const dup = this.tracks.find((t) => t.file.name === file.name && t.file.size === file.size);
-      if (dup) continue;
-      const tags = await readTags(file).catch(() => ({}));
-      const fromName = parseFilename(file.name);
-      const track = {
-        id: 'local:' + nextId++,
-        file,
-        title: tags.title || fromName.title,
-        artist: tags.artist || fromName.artist,
-        album: tags.album || '',
-        duration: await readDuration(file),
-        bpm: tags.bpm || null,
-        analysis: null,
-        source: 'local',
-      };
+      done++;
+      const fp = fingerprint(file);
+      if (this.byFp.has(fp) || this.tracks.some((t) => t.file.name === file.name && t.file.size === file.size)) continue;
+      const saved = this.store ? await this.store.getTrack(fp).catch(() => null) : null;
+      let track;
+      if (saved) {
+        // Known file: tags, duration, analysis and cues come back from the saved library.
+        track = {
+          id: 'local:' + nextId++, fp, file,
+          title: saved.title, artist: saved.artist || '', album: saved.album || '', duration: saved.duration,
+          bpm: saved.bpm || null, tagKey: saved.tagKey || null,
+          analysis: usableAnalysis(saved.analysis), cues: saved.cues || null,
+          addedAt: saved.addedAt, source: 'local',
+        };
+      } else {
+        const tags = await readTags(file).catch(() => ({}));
+        const fromName = parseFilename(file.name);
+        track = {
+          id: 'local:' + nextId++, fp, file,
+          title: tags.title || fromName.title,
+          artist: tags.artist || fromName.artist,
+          album: tags.album || '',
+          duration: await readDuration(file),
+          bpm: tags.bpm || null,
+          tagKey: parseKey(tags.key),
+          analysis: null,
+          cues: null,
+          addedAt: Date.now(),
+          source: 'local',
+        };
+        this.store?.putTrack(trackRecord(track)).catch((err) => console.warn('SpinDeck: could not save track', err));
+      }
       this.tracks.push(track);
       this.byId.set(track.id, track);
+      this.byFp.set(fp, track);
       added.push(track);
-      onProgress?.(added.length, files.length);
+      onProgress?.(done, files.length);
     }
     return added;
   }
@@ -101,7 +138,7 @@ function readDuration(file) {
   });
 }
 
-// Minimal ID3v2.3/2.4 text-frame reader (title, artist, album, BPM).
+// Minimal ID3v2.3/2.4 text-frame reader (title, artist, album, BPM, initial key).
 async function readTags(file) {
   const head = new Uint8Array(await file.slice(0, 10).arrayBuffer());
   if (head[0] !== 0x49 || head[1] !== 0x44 || head[2] !== 0x33) return {};
@@ -110,7 +147,7 @@ async function readTags(file) {
   const size = ((head[6] & 0x7f) << 21) | ((head[7] & 0x7f) << 14) | ((head[8] & 0x7f) << 7) | (head[9] & 0x7f);
   const buf = new Uint8Array(await file.slice(10, 10 + Math.min(size, 512 * 1024)).arrayBuffer());
   const out = {};
-  const wanted = { TIT2: 'title', TPE1: 'artist', TALB: 'album', TBPM: 'bpm' };
+  const wanted = { TIT2: 'title', TPE1: 'artist', TALB: 'album', TBPM: 'bpm', TKEY: 'key' };
   let pos = 0;
   if (head[5] & 0x40) {
     // Extended header.
@@ -145,4 +182,13 @@ function decodeId3Text(body) {
   else if (enc === 2) text = new TextDecoder('utf-16be').decode(data);
   else text = new TextDecoder('utf-8').decode(data);
   return text.replace(/\0+$/, '').split('\0')[0].trim();
+}
+
+// All audio files under a directory handle (File System Access API), recursively.
+export async function filesFromDirectory(dir, out = []) {
+  for await (const entry of dir.values()) {
+    if (entry.kind === 'directory') await filesFromDirectory(entry, out);
+    else if (AUDIO_EXT.test(entry.name)) out.push(await entry.getFile());
+  }
+  return out;
 }
