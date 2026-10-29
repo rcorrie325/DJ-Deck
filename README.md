@@ -55,8 +55,8 @@ installed into the app itself; there's no `npm install` and no build step.
 Either clone it:
 
 ```sh
-git clone https://github.com/rcorrie325/Canvas-API-Pulls.git
-cd Canvas-API-Pulls
+git clone https://github.com/rcorrie325/DJ-Deck.git
+cd DJ-Deck
 git checkout claude/spotify-dj-app
 ```
 
