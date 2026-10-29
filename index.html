@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SpinDeck DJ</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="config.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><span class="brand-dot"></span>SPINDECK</div>
+    <div class="master-meter" title="Master level"><div id="masterMeter"></div></div>
+    <div class="top-actions">
+      <button id="recBtn" class="btn rec" title="Record the master output">● REC</button>
+      <span id="recTime" class="rec-time"></span>
+      <select id="xfCurve" class="btn" title="Crossfader curve">
+        <option value="smooth">Fader: Smooth</option>
+        <option value="sharp">Fader: Sharp</option>
+      </select>
+      <button id="helpBtn" class="btn" title="Keyboard shortcuts">?</button>
+      <button id="settingsBtn" class="btn" title="Settings">⚙</button>
+      <button id="spotifyBtn" class="btn spotify">Connect Spotify</button>
+      <div id="spotifyUser" class="sp-user" hidden></div>
+    </div>
+  </header>
+
+  <section class="waves">
+    <canvas id="zoomA" class="zoom zoom-a"></canvas>
+    <canvas id="zoomB" class="zoom zoom-b"></canvas>
+    <div class="zoom-ctrl">
+      <button class="btn small" data-zoom="-1" title="Zoom out">−</button>
+      <button class="btn small" data-zoom="1" title="Zoom in">+</button>
+    </div>
+  </section>
+
+  <main class="console">
+    <div id="deckA" class="deck" data-deck="A"></div>
+
+    <section class="mixer">
+      <div class="mix-cols">
+        <div class="mix-col" data-ch="A">
+          <div class="knob-slot" data-k="trim"></div>
+          <div class="knob-slot" data-k="high"></div>
+          <div class="knob-slot" data-k="mid"></div>
+          <div class="knob-slot" data-k="low"></div>
+          <div class="knob-slot filter" data-k="filter"></div>
+          <div class="fader-wrap">
+            <div class="ch-meter"><div class="ch-meter-fill" id="meterA"></div></div>
+            <input type="range" class="ch-fader" id="faderA" min="0" max="1" step="0.001" value="0.85" orient="vertical">
+          </div>
+          <div class="ch-label">A</div>
+        </div>
+        <div class="mix-col master-col">
+          <div class="knob-slot" data-k="master"></div>
+        </div>
+        <div class="mix-col" data-ch="B">
+          <div class="knob-slot" data-k="trim"></div>
+          <div class="knob-slot" data-k="high"></div>
+          <div class="knob-slot" data-k="mid"></div>
+          <div class="knob-slot" data-k="low"></div>
+          <div class="knob-slot filter" data-k="filter"></div>
+          <div class="fader-wrap">
+            <div class="ch-meter"><div class="ch-meter-fill" id="meterB"></div></div>
+            <input type="range" class="ch-fader" id="faderB" min="0" max="1" step="0.001" value="0.85" orient="vertical">
+          </div>
+          <div class="ch-label">B</div>
+        </div>
+      </div>
+      <div class="xfader-wrap">
+        <span>A</span>
+        <input type="range" id="xfader" min="0" max="1" step="0.001" value="0.5">
+        <span>B</span>
+      </div>
+    </section>
+
+    <div id="deckB" class="deck" data-deck="B"></div>
+  </main>
+
+  <section class="library">
+    <aside class="crates">
+      <div class="crate-head">Library</div>
+      <button class="crate active" data-crate="local">♫ Local Files <span id="localCount" class="count">0</span></button>
+      <label class="crate add-files">＋ Add files
+        <input type="file" id="fileInput" accept="audio/*,.mp3,.wav,.flac,.ogg,.m4a,.aac,.aif,.aiff" multiple hidden>
+      </label>
+      <label class="crate add-files">＋ Add folder
+        <input type="file" id="folderInput" webkitdirectory multiple hidden>
+      </label>
+      <div class="crate-head">Spotify</div>
+      <div id="spotifyCrates" class="sp-crates">
+        <p class="muted small-pad">Connect Spotify to browse your playlists and liked songs.</p>
+      </div>
+    </aside>
+    <div class="tracks">
+      <div class="track-toolbar">
+        <input id="searchInput" type="search" placeholder="Filter library… (Enter to search Spotify)">
+        <span id="crateTitle" class="crate-title">Local Files</span>
+        <div id="preview" class="preview" hidden>
+          <img id="previewArt" alt="">
+          <div class="preview-meta"><b id="previewTitle"></b><span id="previewArtist"></span></div>
+          <button id="previewToggle" class="btn small">⏸</button>
+          <span class="muted tiny">Spotify preview · not routed to mixer</span>
+        </div>
+      </div>
+      <div class="table-wrap" id="dropZone">
+        <table class="track-table">
+          <thead><tr><th></th><th>Title</th><th>Artist</th><th>BPM</th><th>Time</th><th>Local</th><th>Load</th></tr></thead>
+          <tbody id="trackBody"></tbody>
+        </table>
+        <div id="emptyState" class="empty">Drop audio files or a folder here, or use “Add files”.</div>
+      </div>
+    </div>
+  </section>
+
+  <dialog id="settingsDialog">
+    <form method="dialog">
+      <h2>Settings</h2>
+      <label>Spotify Client ID
+        <input id="clientIdInput" placeholder="from developer.spotify.com/dashboard" autocomplete="off">
+      </label>
+      <p class="muted">Add this Redirect URI to your Spotify app:<br><code id="redirectUri"></code></p>
+      <menu><button class="btn" value="cancel">Close</button><button class="btn spotify" id="saveSettings" value="save">Save</button></menu>
+    </form>
+  </dialog>
+
+  <dialog id="helpDialog">
+    <form method="dialog">
+      <h2>Keyboard shortcuts</h2>
+      <table class="keys">
+        <tr><th></th><th>Deck A</th><th>Deck B</th></tr>
+        <tr><td>Play / pause</td><td><kbd>Q</kbd></td><td><kbd>P</kbd></td></tr>
+        <tr><td>Cue (hold to preview)</td><td><kbd>W</kbd></td><td><kbd>O</kbd></td></tr>
+        <tr><td>Sync</td><td><kbd>E</kbd></td><td><kbd>I</kbd></td></tr>
+        <tr><td>Hot cues 1–4 (Shift deletes)</td><td><kbd>1</kbd>–<kbd>4</kbd></td><td><kbd>7</kbd>–<kbd>0</kbd></td></tr>
+        <tr><td>4-beat loop</td><td><kbd>R</kbd></td><td><kbd>U</kbd></td></tr>
+        <tr><td>Nudge back / forward</td><td><kbd>A</kbd> <kbd>S</kbd></td><td><kbd>K</kbd> <kbd>L</kbd></td></tr>
+        <tr><td>Crossfader</td><td colspan="2"><kbd>←</kbd> <kbd>→</kbd> (Shift = slam)</td></tr>
+      </table>
+      <p class="muted">Knobs: drag up/down, scroll, double-click to reset. Shift-drag for fine control.</p>
+      <menu><button class="btn" value="close">Close</button></menu>
+    </form>
+  </dialog>
+
+  <div id="toast" class="toast" hidden></div>
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
