@@ -5,6 +5,8 @@ import { Spotify } from './spotify.js';
 import { analyzeTrack } from './analysis.js';
 import { drawZoom, drawOverview } from './waveform.js';
 import { Knob } from './knob.js';
+import { Midi } from './midi.js';
+import { buildTargets } from './midi-targets.js';
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
@@ -258,18 +260,19 @@ async function loadToDeck(id, track) {
 // ---------- mixer ----------
 
 function setupMixer() {
+  const knobs = (window.spindeck.knobs = {}); // knob registry, e.g. knobs['A.high'] (used by MIDI mapping)
   for (const id of ['A', 'B']) {
     const col = $(`.mix-col[data-ch="${id}"]`);
-    new Knob($('[data-k="trim"]', col), { label: 'GAIN', onChange: (v) => mixer.setTrim(id, v) });
-    new Knob($('[data-k="high"]', col), { label: 'HI', onChange: (v) => mixer.setEq(id, 'high', v) });
-    new Knob($('[data-k="mid"]', col), { label: 'MID', onChange: (v) => mixer.setEq(id, 'mid', v) });
-    new Knob($('[data-k="low"]', col), { label: 'LOW', onChange: (v) => mixer.setEq(id, 'low', v) });
-    new Knob($('[data-k="filter"]', col), { label: 'FILTER', onChange: (v) => mixer.setFilter(id, v) });
+    knobs[`${id}.trim`] = new Knob($('[data-k="trim"]', col), { label: 'GAIN', onChange: (v) => mixer.setTrim(id, v) });
+    knobs[`${id}.high`] = new Knob($('[data-k="high"]', col), { label: 'HI', onChange: (v) => mixer.setEq(id, 'high', v) });
+    knobs[`${id}.mid`] = new Knob($('[data-k="mid"]', col), { label: 'MID', onChange: (v) => mixer.setEq(id, 'mid', v) });
+    knobs[`${id}.low`] = new Knob($('[data-k="low"]', col), { label: 'LOW', onChange: (v) => mixer.setEq(id, 'low', v) });
+    knobs[`${id}.filter`] = new Knob($('[data-k="filter"]', col), { label: 'FILTER', onChange: (v) => mixer.setFilter(id, v) });
     const fader = $(`#fader${id}`);
     fader.addEventListener('input', () => mixer.setFader(id, +fader.value));
     mixer.setFader(id, +fader.value);
   }
-  new Knob($('.master-col [data-k="master"]'), {
+  knobs.master = new Knob($('.master-col [data-k="master"]'), {
     label: 'MASTER', min: 0, max: 1, value: 0.8, onChange: (v) => mixer.setMaster(v),
   });
   const xf = $('#xfader');
@@ -602,5 +605,6 @@ setupMixer();
 setupLibrary();
 setupTopbar();
 setupKeys();
+window.spindeck.midi = new Midi({ targets: buildTargets({ decks, mixer, toast }), toast });
 initSpotify();
 requestAnimationFrame(frame);
