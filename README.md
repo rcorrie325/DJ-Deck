@@ -19,10 +19,16 @@ the matching tracks from their own music files.
 **Mixer**
 - Gain, 3-band EQ with full kill, combined low-pass/high-pass filter knob
 - Channel faders with level meters, crossfader (smooth or sharp curve), master volume with a safety limiter
+- **Effects** per channel: echo (synced to the deck's BPM), reverb and flanger, with DEPTH and BEATS knobs; tails ring out when you switch them off
+- **Headphone cue:** CUE buttons per channel plus CUE MIX and PHONES knobs. Needs a 4-channel audio output (most DJ controllers): master plays on outputs 1–2, headphones on 3–4
+- **Audio output picker** in ⚙ Settings (Chrome/Edge), e.g. to play through a controller's sound card
 - **Record your mix** to a file (REC button)
 
 **Library**
 - Import files or whole folders (MP3, WAV, FLAC, AAC/M4A, OGG…), with ID3 tag reading
+- **Musical key detection** shown in Camelot notation (8A, 12B…) on the decks and in a Key column; tracks that mix in key with what's playing are highlighted. Without key lock, the deck's key readout follows tempo changes
+- **Saved library:** tags, BPM, key, waveforms and cue points are kept in the browser between visits. In Chrome/Edge, folders added with "Add folder" reconnect after a reload with one click; in other browsers re-add the files and everything comes back
+- **Crates:** make your own lists and drag tracks into them; save a Spotify playlist as a crate of the tracks you have locally
 - Spotify: Liked Songs, all your playlists, and catalog search (press Enter in the search box)
 - Each Spotify track is matched to your local files (✓ = match found) and loads onto a deck like any other track
 - ▶ preview any Spotify track in a separate Spotify player (Premium)
@@ -199,9 +205,11 @@ js/app.js         wires everything together (UI, keyboard, library, render loop)
 js/deck.js        deck transport: tempo, key lock, cues, loops, sync
 js/deck-worklet.js AudioWorklet playback: variable-rate reading, loops, WSOLA key lock
 js/mixer.js       Web Audio mixer graph
-js/analysis.js    waveform peaks + BPM/beat-grid detection
+js/analysis.js    waveform peaks, BPM/beat-grid and musical key detection
 js/waveform.js    canvas waveform rendering
 js/library.js     local file import, ID3 tags, Spotify↔local matching
+js/store.js       IndexedDB storage for the saved library, cues and crates
+tests/            end-to-end tests (see tests/README.md)
 js/spotify.js     Spotify PKCE auth, Web API client, Web Playback SDK preview
 js/knob.js        rotary knob control
 js/midi.js        Web MIDI: devices, MIDI Learn, soft takeover, LED feedback
@@ -210,5 +218,10 @@ js/midi-targets.js  list of controls a controller can be mapped to
 
 ## Limitations / ideas for next steps
 
-- The local library resets on reload. Persisting it with the File System Access API would fix that.
-- No separate headphone cue output (needs `AudioContext.setSinkId` and a second audio device).
+- **Not tested on real DJ hardware.** Controller mapping, controller lights and 4-channel headphone cue were tested with a simulated controller and a simulated 4-channel output only.
+- BPM and key are filled in the first time a track is loaded onto a deck; there's no background analysis of the whole library yet.
+- The beat grid can't be edited by hand yet; loose live recordings can get an off grid.
+- With key lock on, a loop can overshoot its end by up to ~40 ms before jumping back.
+- Key lock and manual loops have no keyboard shortcuts yet.
+- Headphone cue needs a 4-channel output device; on ordinary 2-channel speakers or headphones the CUE buttons are disabled.
+- Still missing compared with Serato: sampler, slip / reverse / censor, stems, 4-deck mode, DVS (timecode vinyl).

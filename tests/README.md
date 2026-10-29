@@ -14,6 +14,10 @@ npm test              # run everything; `npm test -- music` runs one file
 | `core.test.cjs` | BPM/first-beat detection on generated tracks with known answers, play, sync (tempo + phase), loops, hot cues, phone layout |
 | `spotify.test.cjs` | PKCE login, playlists, local matching and search against mocked Spotify endpoints |
 | `library.test.cjs` | Key detection on synthesized chords (and detected keys of the real tracks, informational), saved library restore of tags/analysis/cues after reload, crates, stored folder handles, Save as crate, library layout |
+| `deck.test.cjs` | Position clock, seeking, key lock pitch (offline render), reported position vs. the audible audio, manual loops, 8 hot cues |
+| `mixer.test.cjs` | FX bypass is bit-identical, echo timing, reverb tail, flanger, 4-channel headphone cue routing, mixer UI |
+| `midi.test.cjs` | MIDI Learn, soft takeover, jog encoders, cue hold, LED feedback, saving/export/import (fake controller) |
+| `integration.test.cjs` | Controller driving key lock, hot cue 8, manual loops and FX; deck key readout with and without key lock |
 | `music.test.cjs` | BPM and beat grid on real music (skipped until `fetch-music` has run) |
 
 Generated test tracks are written to `tests/.cache/`, and downloaded music to
