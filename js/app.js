@@ -72,13 +72,21 @@ function deckTemplate(id) {
         <button class="btn sync" title="Sync tempo and beat to the other deck">SYNC</button>
       </div>
       <div class="pads hotcues">
-        ${[0, 1, 2, 3].map((i) => `<button class="pad hot" data-i="${i}" title="Hot cue ${i + 1} (Shift-click to delete)">${i + 1}</button>`).join('')}
+        ${[0, 1, 2, 3, 4, 5, 6, 7].map((i) => `<button class="pad hot" data-i="${i}" title="Hot cue ${i + 1} (Shift-click to delete)">${i + 1}</button>`).join('')}
       </div>
       <div class="pads loops">
         ${[0.5, 1, 2, 4, 8, 16].map((b) => `<button class="pad loop" data-beats="${b}" title="${b}-beat loop">${b === 0.5 ? '½' : b}</button>`).join('')}
       </div>
+      <div class="pads loop-ctrl">
+        <button class="pad lctl loop-in" title="Loop in: set the loop start">IN</button>
+        <button class="pad lctl loop-out" title="Loop out: loop from the in point to here">OUT</button>
+        <button class="pad lctl reloop" title="Reloop / exit loop">RELOOP</button>
+        <button class="pad lctl loop-half" title="Halve loop">½×</button>
+        <button class="pad lctl loop-double" title="Double loop">2×</button>
+      </div>
     </div>
     <div class="pitch">
+      <button class="btn small keylock" title="Key lock: keep the pitch when changing tempo">KEY</button>
       <button class="btn small range" title="Pitch range">±8%</button>
       <input type="range" class="pitch-fader" min="-1" max="1" step="0.0005" value="0" title="Tempo (double-click to reset)">
       <div class="bend">
@@ -106,6 +114,10 @@ function setupDeck(id) {
     cue: $('.cue', root),
     sync: $('.sync', root),
     range: $('.range', root),
+    keylock: $('.keylock', root),
+    loopIn: $('.loop-in', root),
+    loopOut: $('.loop-out', root),
+    reloop: $('.reloop', root),
     pitch: $('.pitch-fader', root),
     overview: $('.overview', root),
     disc: $('.platter-disc', root),
@@ -131,6 +143,12 @@ function setupDeck(id) {
   });
   ui.hot.forEach((b) => b.addEventListener('click', (e) => deck.hotCue(+b.dataset.i, e.shiftKey)));
   ui.loops.forEach((b) => b.addEventListener('click', () => deck.setLoop(+b.dataset.beats)));
+  ui.loopIn.addEventListener('click', () => deck.loopIn());
+  ui.loopOut.addEventListener('click', () => deck.loopOut());
+  ui.reloop.addEventListener('click', () => deck.reloop());
+  $('.loop-half', root).addEventListener('click', () => deck.halveLoop());
+  $('.loop-double', root).addEventListener('click', () => deck.doubleLoop());
+  ui.keylock.addEventListener('click', () => deck.setKeylock(!deck.keylock));
   ui.pitch.addEventListener('input', () => deck.setPitch(+ui.pitch.value));
   ui.pitch.addEventListener('dblclick', () => { ui.pitch.value = 0; deck.setPitch(0); });
   ui.range.addEventListener('click', () => {
@@ -205,6 +223,11 @@ function updateDeckUI(id) {
   ui.cue.classList.toggle('on', deck.loaded && !deck.playing && Math.abs(deck.position - deck.cuePoint) < 0.01);
   ui.hot.forEach((b, i) => b.classList.toggle('set', deck.hotCues[i] != null));
   ui.loops.forEach((b) => b.classList.toggle('on', deck.loop?.beats === +b.dataset.beats));
+  ui.loopIn.classList.toggle('on', deck.loopInPoint != null);
+  ui.loopOut.classList.toggle('on', !!deck.loop);
+  ui.reloop.classList.toggle('set', !!deck.lastLoop);
+  ui.reloop.classList.toggle('on', !!deck.loop);
+  ui.keylock.classList.toggle('on', deck.keylock);
   ui.range.textContent = `±${Math.round(deck.range * 100)}%`;
   ui.pitch.value = deck.pitch;
   const pct = (deck.rate - 1) * 100;
@@ -242,7 +265,7 @@ async function loadToDeck(id, track) {
       if (!track.analysis.bpm && track.bpm) track.analysis.bpm = track.bpm;
       track.bpm = track.analysis.bpm;
     }
-    deck.load(buffer, track, track.analysis);
+    await deck.load(buffer, track, track.analysis);
     ui.art.src = track.art || '';
     ui.art.hidden = !track.art;
     renderTracks();

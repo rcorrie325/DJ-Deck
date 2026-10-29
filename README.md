@@ -10,7 +10,9 @@ the matching tracks from their own music files.
 **Decks (×2)**
 - Scrolling, color-coded waveforms (red = lows, green = mids, blue = highs) with beat grid, plus a full-track overview
 - Automatic BPM and beat-grid detection
-- Play / CDJ-style cue (hold to preview), 4 hot cues, beat-snapped loops (½–16 beats)
+- Play / CDJ-style cue (hold to preview), 8 hot cues (two rows of pads; keys 1–4 / 7–0 for the first four)
+- Beat-snapped auto loops (½–16 beats) plus manual loops: IN / OUT, RELOOP (exit / re-enable), ½× and 2×
+- **Key lock** (KEY): change tempo without changing pitch (WSOLA time-stretch in an AudioWorklet)
 - Tempo fader with ±8 / ±16 / ±50% ranges, pitch-bend nudge, spinning platter (nudge while playing, scrub while paused)
 - **Sync** matches tempo *and* beat phase to the other deck (handles half/double time)
 
@@ -153,7 +155,8 @@ index.html        UI shell
 styles.css        styling
 config.js         optional baked-in Spotify Client ID / redirect URI
 js/app.js         wires everything together (UI, keyboard, library, render loop)
-js/deck.js        playback engine: tempo, cues, loops, sync
+js/deck.js        deck transport: tempo, key lock, cues, loops, sync
+js/deck-worklet.js AudioWorklet playback: variable-rate reading, loops, WSOLA key lock
 js/mixer.js       Web Audio mixer graph
 js/analysis.js    waveform peaks + BPM/beat-grid detection
 js/waveform.js    canvas waveform rendering
@@ -165,6 +168,5 @@ js/knob.js        rotary knob control
 ## Limitations / ideas for next steps
 
 - The local library resets on reload. Persisting it with the File System Access API would fix that.
-- No key lock: changing tempo also changes pitch, as on a turntable.
 - No separate headphone cue output (needs `AudioContext.setSinkId` and a second audio device).
 - MIDI controller support could be added with the Web MIDI API.
