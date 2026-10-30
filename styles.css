@@ -9,7 +9,6 @@
   --b: #2fd0ff;
   --ok: #3dff8b;
   --warn: #ffb020;
-  --spotify: #1ed760;
   color-scheme: dark;
 }
 
@@ -42,7 +41,6 @@ code { background: var(--panel-2); padding: 2px 6px; border-radius: 4px; user-se
 .btn:active { transform: translateY(1px); }
 .btn.small { padding: 3px 8px; font-size: 12px; }
 .btn.tiny { padding: 1px 7px; font-size: 11px; margin-left: 3px; }
-.btn.spotify { background: var(--spotify); color: #000; border-color: var(--spotify); font-weight: 600; }
 
 /* Top bar */
 .topbar {
@@ -61,8 +59,6 @@ code { background: var(--panel-2); padding: 2px 6px; border-radius: 4px; user-se
 .rec.on { background: var(--a); border-color: var(--a); color: #fff; animation: pulse 1s infinite; }
 .rec-time { font-variant-numeric: tabular-nums; color: var(--a); min-width: 36px; }
 @keyframes pulse { 50% { opacity: .65; } }
-.sp-user { display: flex; align-items: center; gap: 6px; color: var(--spotify); }
-.sp-user img { width: 24px; height: 24px; border-radius: 50%; }
 
 /* Waveforms */
 .waves { position: relative; display: grid; grid-template-rows: 1fr 1fr; background: #050608; border-bottom: 1px solid var(--line); }
@@ -176,11 +172,6 @@ code { background: var(--panel-2); padding: 2px 6px; border-radius: 4px; user-se
 .track-toolbar { display: flex; align-items: center; gap: 12px; padding: 8px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
 #searchInput { flex: 0 1 320px; background: #0e1015; border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px; }
 .crate-title { font-weight: 700; color: var(--muted); }
-.preview { margin-left: auto; display: flex; align-items: center; gap: 8px; background: #10251a; border: 1px solid #1e5a37; border-radius: 8px; padding: 4px 8px; }
-.preview[hidden] { display: none; }
-.preview img { width: 28px; height: 28px; border-radius: 4px; }
-.preview-meta { display: flex; flex-direction: column; max-width: 200px; }
-.preview-meta * { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .table-wrap { overflow: auto; flex: 1; position: relative; max-height: 45vh; }
 .table-wrap.drop { outline: 2px dashed var(--ok); outline-offset: -4px; }
 .track-table { width: 100%; border-collapse: collapse; }

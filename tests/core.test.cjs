@@ -94,6 +94,24 @@ module.exports = {
     await page.close();
   },
 
+  async 'runs fully offline: no requests outside the app, no Spotify UI'({ browser, baseUrl }) {
+    const page = await browser.newPage();
+    const external = [];
+    page.on('request', (r) => { if (!r.url().startsWith(baseUrl) && !r.url().startsWith('blob:') && !r.url().startsWith('data:')) external.push(r.url()); });
+    await page.goto(baseUrl);
+    await addFiles(page, [generated.groove124()]);
+    await page.click('#trackBody tr:nth-child(1) button[data-act="A"]');
+    await page.waitForFunction(() => window.spindeck.decks.A.loaded);
+    await page.click('#deckA .play');
+    await page.click('#settingsBtn');
+    await page.waitForTimeout(300);
+    assert(external.length === 0, `unexpected external requests: ${external.join(', ')}`);
+    const text = (await page.content()).toLowerCase();
+    assert(!text.includes('spotify'), 'page should not mention Spotify');
+    assert(await page.evaluate(() => !('spotify' in window.spindeck)), 'no spotify object');
+    await page.close();
+  },
+
   async 'layout has no horizontal scroll at phone width'({ browser, baseUrl }) {
     const page = await openApp(browser, baseUrl);
     await page.setViewportSize({ width: 390, height: 900 });

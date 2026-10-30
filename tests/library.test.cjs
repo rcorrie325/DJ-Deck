@@ -229,42 +229,6 @@ module.exports = {
     }
   },
 
-  async 'saves a Spotify playlist as a crate of its matched local tracks'({ browser, baseUrl }) {
-    const page = await openApp(browser, baseUrl);
-    const sp = (id, name, artist) => ({ id, uri: `spotify:track:${id}`, name, duration_ms: 60000, artists: [{ name: artist }], album: { name: 'X', images: [] } });
-    await page.route('https://accounts.spotify.com/authorize**', (r) => r.fulfill({ body: 'auth' }));
-    await page.route('https://accounts.spotify.com/api/token', (r) => r.fulfill({ json: { access_token: 'AT', refresh_token: 'RT', expires_in: 3600 } }));
-    await page.route('https://api.spotify.com/v1/**', (r) => {
-      const p = new URL(r.request().url()).pathname;
-      if (p === '/v1/me') return r.fulfill({ json: { id: 'u1', display_name: 'Test User', images: [] } });
-      if (p === '/v1/me/playlists') return r.fulfill({ json: { items: [{ id: 'pl1', name: 'Friday Set' }], next: null } });
-      if (p === '/v1/playlists/pl1/items') {
-        return r.fulfill({ json: { next: null, items: [{ item: sp('t1', 'Groove 124', 'DJ Test') }, { item: sp('t3', 'Not On Disk', 'Nobody') }, { item: sp('t2', 'Rolling 128', 'Beat Maker') }] } });
-      }
-      return r.fulfill({ status: 404, json: {} });
-    });
-    await page.click('#settingsBtn');
-    await page.fill('#clientIdInput', 'abc123');
-    await page.click('#saveSettings');
-    await page.click('#spotifyBtn');
-    await page.waitForURL(/accounts\.spotify\.com/);
-    const state = new URL(page.url()).searchParams.get('state');
-    await page.goto(`${baseUrl}?code=CODE&state=${state}`);
-    await page.waitForSelector('[data-crate="pl:pl1"]');
-    await addFiles(page, [generated.groove124(), generated.rolling128()]);
-    assert(await page.isHidden('#saveCrateBtn'), 'no Save as crate on local files');
-    await page.click('[data-crate="pl:pl1"]');
-    await page.waitForFunction(() => document.querySelector('#crateTitle').textContent === 'Friday Set');
-    await page.click('#saveCrateBtn');
-    await page.waitForFunction(() => window.spindeck.crates.list().length === 1);
-    const c = await page.evaluate(() => window.spindeck.crates.list()[0]);
-    assert(c.name === 'Friday Set' && c.trackIds.length === 2 && c.trackIds[0].startsWith('DJ Test - Groove 124.wav|'),
-      `saved crate: ${JSON.stringify(c)}`);
-    assert((await page.textContent('#toast')).includes('2 of 3'), 'toast reports matched count');
-    assert(page.errors.length === 0, `page errors: ${page.errors}`);
-    await page.close();
-  },
-
   async 'library UI fits at desktop and phone widths'({ browser, baseUrl }) {
     const page = await openApp(browser, baseUrl);
     await page.click('#newCrateBtn');

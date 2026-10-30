@@ -1,7 +1,6 @@
 import { Deck } from './deck.js';
 import { Mixer, peakLevel, FX_BEATS } from './mixer.js';
 import { Library, trackRecord, trackKey, filesFromDirectory } from './library.js';
-import { Spotify } from './spotify.js';
 import { analyzeTrack, shiftCamelot, camelotCompatible } from './analysis.js';
 import { Store } from './store.js';
 import { drawZoom, drawOverview } from './waveform.js';
@@ -17,9 +16,7 @@ const mixer = new Mixer(ctx);
 const decks = { A: new Deck(ctx, 'A', mixer.input('A')), B: new Deck(ctx, 'B', mixer.input('B')) };
 const store = new Store();
 const library = new Library(store);
-const spotify = new Spotify();
-const trackIndex = new Map(); // id -> track (local and Spotify)
-const playlistCache = new Map();
+const trackIndex = new Map(); // id -> track
 const ZOOMS = [2, 4, 6, 8, 12, 16, 24];
 let zoomIdx = 3;
 let crate = { key: 'local', title: 'Local Files', tracks: [] };
@@ -27,7 +24,7 @@ let userCrates = []; // saved crates: { id, name, trackIds: [fingerprint] }
 const missingStubs = new Map(); // fingerprint -> placeholder row for a crate track whose file isn't loaded
 const libStats = { analyzed: 0 }; // analyzeTrack calls this session (tests check the cache is used)
 
-window.spindeck = { ctx, mixer, decks, library, spotify }; // handy for debugging in the console
+window.spindeck = { ctx, mixer, decks, library }; // handy for debugging in the console
 Object.assign(window.spindeck, { store, libStats });
 
 document.addEventListener('pointerdown', () => ctx.state !== 'running' && ctx.resume(), true);
@@ -259,15 +256,6 @@ function updateDeckUI(id) {
 
 async function loadToDeck(id, track) {
   const deck = decks[id];
-  if (track.source === 'spotify') {
-    const match = library.findMatch(track);
-    if (!match) {
-      toast(`No local file for “${track.title}”. Add it to your library to mix it — or ▶ preview it via Spotify.`, 5000);
-      return;
-    }
-    if (track.art && !match.art) match.art = track.art;
-    track = match;
-  }
   if (track.source === 'missing') {
     toast(`“${track.title}” isn't in this session's library — add its file${$('#reconnectBtn').hidden ? '' : ' or reconnect your library'} first.`, 5000);
     return;
@@ -598,14 +586,13 @@ function selectCrate(key, title, tracks) {
   crate = { key, title, tracks };
   $$('.crate').forEach((c) => c.classList.toggle('active', c.dataset.crate === key));
   $('#crateTitle').textContent = title;
-  $('#saveCrateBtn').hidden = !(key === 'liked' || key.startsWith('pl:'));
   renderTracks();
 }
 
 function renderTracks() {
   const q = $('#searchInput').value.trim().toLowerCase();
   const list = crate.key === 'local' ? library.tracks : crate.tracks;
-  const rows = q && crate.key !== 'search'
+  const rows = q
     ? list.filter((t) => `${t.title} ${t.artist} ${t.album}`.toLowerCase().includes(q))
     : list;
   const loadedIds = new Set(Object.values(decks).map((d) => d.track?.id));
@@ -617,21 +604,17 @@ function renderTracks() {
     ? 'Drop audio files or a folder here, or use “Add files”.'
     : inUserCrate ? 'Empty crate — drag tracks from your library onto it in the sidebar.' : 'No tracks.';
   $('#trackBody').innerHTML = rows.map((t) => {
-    const match = t.source === 'spotify' ? library.findMatch(t) : t;
-    const bpm = match?.bpm ? match.bpm.toFixed(1) : '';
-    const key = trackKey(match);
+    const bpm = t.bpm ? t.bpm.toFixed(1) : '';
+    const key = trackKey(t);
     const camelot = key?.camelot || '';
     const art = t.art ? `<img src="${esc(t.art)}" alt="" loading="lazy">` : '<span class="note">♪</span>';
-    const local = t.source === 'spotify'
-      ? (match ? '<span class="ok" title="Matched a local file">✓</span>' : '<span class="miss" title="No local file">—</span>')
-      : t.source === 'missing'
-        ? '<span class="miss" title="File not added this session">—</span>'
-        : '<span class="ok">●</span>';
-    const preview = t.source === 'spotify' ? `<button class="btn tiny pv" data-act="preview" title="Preview on Spotify">▶</button>` : '';
+    const local = t.source === 'missing'
+      ? '<span class="miss" title="File not added this session">—</span>'
+      : '<span class="ok">●</span>';
     const remove = inUserCrate ? '<button class="btn tiny" data-act="remove" title="Remove from crate">×</button>' : '';
     const cls = [
-      loadedIds.has(match?.id) && 'loaded',
-      ((t.source === 'spotify' && !match) || t.source === 'missing') && 'unmatched',
+      loadedIds.has(t.id) && 'loaded',
+      t.source === 'missing' && 'unmatched',
       isKeyMatch(camelot, refs) && 'key-match',
     ].filter(Boolean).join(' ');
     return `<tr draggable="true" data-id="${esc(t.id)}" data-key="${camelot}" class="${cls}">
@@ -642,14 +625,14 @@ function renderTracks() {
       <td class="key" title="${esc(key?.name || '')}">${camelot}</td>
       <td class="num">${fmtTime(t.duration, false)}</td>
       <td class="center">${local}</td>
-      <td class="load">${preview}${remove}<button class="btn tiny" data-act="A">A</button><button class="btn tiny" data-act="B">B</button></td>
+      <td class="load">${remove}<button class="btn tiny" data-act="A">A</button><button class="btn tiny" data-act="B">B</button></td>
     </tr>`;
   }).join('');
 }
 
 // ---------- saved library: crates & folders ----------
 
-const trackFp = (t) => (t?.source === 'spotify' ? library.findMatch(t)?.fp : t?.fp) || null;
+const trackFp = (t) => t?.fp || null;
 
 function crateTracks(c) {
   return c.trackIds.map((fp) => library.byFp.get(fp) || missingStubs.get(fp) || stubFor(fp, null));
@@ -816,13 +799,6 @@ function setupCrates() {
     const n = await addToCrate(el.dataset.id, [fp]);
     toast(n ? `Added “${t.title}” to ${c.name}` : `“${t.title}” is already in ${c.name}`);
   });
-
-  $('#saveCrateBtn').addEventListener('click', async () => {
-    const fps = [...new Set(crate.tracks.map(trackFp).filter(Boolean))];
-    if (!fps.length) return toast('None of these tracks match a local file yet — add the files first');
-    const c = await createCrate(crate.title, fps);
-    toast(`Saved crate “${c.name}” with ${fps.length} of ${crate.tracks.length} tracks`);
-  });
 }
 
 // Chrome/Edge: remember picked folders so the library can be re-imported after a reload.
@@ -919,8 +895,7 @@ function setupLibrary() {
     const row = e.target.closest('tr');
     if (!btn || !row) return;
     const t = trackIndex.get(row.dataset.id);
-    if (btn.dataset.act === 'preview') previewSpotify(t);
-    else if (btn.dataset.act === 'remove') removeFromCrate(crate.key.slice(6), trackFp(t));
+    if (btn.dataset.act === 'remove') removeFromCrate(crate.key.slice(6), trackFp(t));
     else loadToDeck(btn.dataset.act, t);
   });
   body.addEventListener('dblclick', (e) => {
@@ -945,116 +920,13 @@ function setupLibrary() {
   });
 
   const search = $('#searchInput');
-  search.addEventListener('input', () => { if (crate.key !== 'search') renderTracks(); });
-  search.addEventListener('keydown', async (e) => {
-    e.stopPropagation(); // keep deck shortcuts from firing while typing
-    if (e.key !== 'Enter' || !search.value.trim()) return;
-    if (!spotify.loggedIn) return toast('Connect Spotify to search its catalog');
-    try {
-      const results = await spotify.search(search.value.trim());
-      results.forEach((t) => trackIndex.set(t.id, t));
-      selectCrate('search', `Spotify: “${search.value.trim()}”`, results);
-    } catch (err) { toast(err.message); }
-  });
-}
-
-// ---------- Spotify ----------
-
-async function initSpotify() {
-  $('#redirectUri').textContent = spotify.redirectUri;
-  $('#clientIdInput').value = spotify.clientId;
-  try {
-    await spotify.handleRedirect();
-  } catch (err) {
-    toast(err.message, 6000);
-  }
-  if (!spotify.loggedIn) return;
-  try {
-    const me = await spotify.me();
-    const btn = $('#spotifyBtn');
-    btn.textContent = 'Log out';
-    btn.classList.remove('spotify');
-    const u = $('#spotifyUser');
-    u.hidden = false;
-    const img = me.images?.[0]?.url;
-    u.innerHTML = `${img ? `<img src="${esc(img)}" alt="">` : ''}<span>${esc(me.display_name || me.id)}</span>`;
-    await renderSpotifyCrates();
-  } catch (err) {
-    console.error(err);
-    toast(`Spotify: ${err.message}`, 6000);
-    if (err.status === 401 || err.status === 403 || /refresh|token/i.test(err.message)) spotify.logout();
-  }
-}
-
-async function renderSpotifyCrates() {
-  const el = $('#spotifyCrates');
-  el.innerHTML = '<p class="muted small-pad">Loading playlists…</p>';
-  let playlists = [];
-  try {
-    playlists = (await spotify.playlists()).filter(Boolean);
-  } catch (err) {
-    toast(`Couldn't load playlists: ${err.message}`);
-  }
-  el.innerHTML = `<button class="crate" data-crate="liked">♥ Liked Songs</button>`
-    + playlists.map((p) => `<button class="crate" data-crate="pl:${esc(p.id)}" data-name="${esc(p.name)}">▤ ${esc(p.name)}</button>`).join('');
-  el.addEventListener('click', async (e) => {
-    const b = e.target.closest('.crate');
-    if (!b) return;
-    const key = b.dataset.crate;
-    const title = key === 'liked' ? 'Liked Songs' : b.dataset.name;
-    $('#crateTitle').textContent = 'Loading…';
-    try {
-      let tracks = playlistCache.get(key);
-      if (!tracks) {
-        tracks = key === 'liked' ? await spotify.likedTracks() : await spotify.playlistTracks(key.slice(3));
-        playlistCache.set(key, tracks);
-      }
-      tracks.forEach((t) => trackIndex.set(t.id, t));
-      selectCrate(key, title, tracks);
-    } catch (err) {
-      $('#crateTitle').textContent = crate.title;
-      toast(`Couldn't load ${title}: ${err.message}`);
-    }
-  });
-}
-
-async function previewSpotify(t) {
-  const box = $('#preview');
-  try {
-    await spotify.previewTrack(t.uri, (s) => {
-      if (!s) return;
-      $('#previewToggle').textContent = s.paused ? '▶' : '⏸';
-    });
-    box.hidden = false;
-    $('#previewArt').src = t.art || '';
-    $('#previewTitle').textContent = t.title;
-    $('#previewArtist').textContent = t.artist;
-  } catch (err) {
-    toast(`Spotify preview: ${err.message}`, 6000);
-  }
+  search.addEventListener('input', renderTracks);
+  search.addEventListener('keydown', (e) => e.stopPropagation()); // keep deck shortcuts from firing while typing
 }
 
 function setupTopbar() {
-  $('#spotifyBtn').addEventListener('click', async () => {
-    if (spotify.loggedIn) {
-      spotify.logout();
-      location.reload();
-      return;
-    }
-    if (!spotify.clientId) {
-      $('#settingsDialog').showModal();
-      toast('Enter your Spotify Client ID first');
-      return;
-    }
-    try { await spotify.login(); } catch (err) { toast(err.message); }
-  });
   $('#settingsBtn').addEventListener('click', () => $('#settingsDialog').showModal());
   $('#helpBtn').addEventListener('click', () => $('#helpDialog').showModal());
-  $('#saveSettings').addEventListener('click', () => {
-    spotify.clientId = $('#clientIdInput').value;
-    toast('Saved');
-  });
-  $('#previewToggle').addEventListener('click', () => spotify.player?.togglePlay());
   $('#recBtn').addEventListener('click', toggleRecord);
   $$('[data-zoom]').forEach((b) => b.addEventListener('click', () => {
     zoomIdx = Math.max(0, Math.min(ZOOMS.length - 1, zoomIdx - Number(b.dataset.zoom)));
@@ -1149,5 +1021,4 @@ setupLibrary();
 setupTopbar();
 setupKeys();
 window.spindeck.midi = new Midi({ targets: buildTargets({ decks, mixer, toast }), toast });
-initSpotify();
 requestAnimationFrame(frame);

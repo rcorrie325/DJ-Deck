@@ -1,4 +1,4 @@
-// Local track library: file import, tag reading, saved-library restore and matching against Spotify tracks.
+// Local track library: file import, tag reading and saved-library restore.
 import { ANALYSIS_VERSION, parseKey } from './analysis.js';
 import { fingerprint } from './store.js';
 
@@ -72,51 +72,6 @@ export class Library {
     }
     return added;
   }
-
-  // Best local file for a Spotify track, or null.
-  findMatch(spTrack) {
-    const title = normTitle(spTrack.title);
-    const artists = tokens(spTrack.artist);
-    let best = null;
-    let bestScore = 0;
-    for (const t of this.tracks) {
-      t._title ??= normTitle(t.title);
-      t._artists ??= tokens(t.artist);
-      const lt = t._title;
-      if (!lt || !title) continue;
-      let s = 0;
-      if (lt === title) s += 2;
-      else if (lt.includes(title) || title.includes(lt)) s += 1;
-      else continue;
-      const la = t._artists;
-      const overlap = [...artists].filter((a) => la.has(a)).length;
-      if (overlap) s += 1 + Math.min(overlap, 2) * 0.25;
-      else if (la.size) s -= 1;
-      if (spTrack.duration && t.duration && Math.abs(spTrack.duration - t.duration) < 4) s += 0.5;
-      if (s > bestScore) { bestScore = s; best = t; }
-    }
-    return bestScore >= 2 ? best : null;
-  }
-}
-
-function stripAccents(s) { return s.normalize('NFD').replace(/[̀-ͯ]/g, ''); }
-
-function normTitle(s = '') {
-  return stripAccents(s.toLowerCase())
-    .replace(/\((feat|ft|with)[^)]*\)|\[(feat|ft|with)[^\]]*\]/g, '')
-    .replace(/\s(feat|ft)\.?\s.*$/, '')
-    .replace(/\s-\s.*(remaster|version|edit|mix|live|mono|stereo).*$/, '')
-    .replace(/\((original mix|radio edit|remaster(ed)?[^)]*)\)/g, '')
-    .replace(/[^a-z0-9]+/g, ' ')
-    .trim();
-}
-
-function tokens(s = '') {
-  return new Set(
-    stripAccents(s.toLowerCase())
-      .split(/[^a-z0-9]+/)
-      .filter((w) => w.length > 1 && !['the', 'and', 'feat', 'ft', 'with', 'x'].includes(w)),
-  );
 }
 
 export function parseFilename(name) {
