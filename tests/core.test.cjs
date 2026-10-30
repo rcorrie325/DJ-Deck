@@ -69,6 +69,31 @@ module.exports = {
     await page.close();
   },
 
+  async 'tempo reset button returns a synced deck to its original BPM'({ browser, baseUrl }) {
+    const page = await openApp(browser, baseUrl);
+    const idle = () => page.$eval('#deckB .tempo-reset', (e) => e.classList.contains('idle'));
+    assert(await idle(), 'reset is dimmed on an empty deck');
+    await addFiles(page, [generated.groove124(), generated.rolling128()]);
+    await loadDeck(page, 1, 'A');
+    await loadDeck(page, 2, 'B');
+    assert(await idle(), 'reset is dimmed at the original tempo');
+    await page.click('#deckB .sync');
+    let s = await deckState(page);
+    near(s.B.currentBpm, 124, 0.01, 'synced to 124');
+    assert(!(await idle()), 'reset is lit once the tempo has changed');
+
+    await page.click('#deckB .tempo-reset');
+    s = await deckState(page);
+    assert(s.B.rate === 1, `rate should be exactly 1, got ${s.B.rate}`);
+    near(s.B.currentBpm, 128, 1e-9, 'back to the original 128 BPM');
+    near(await page.$eval('#deckB .pitch-fader', (e) => +e.value), 0, 1e-9, 'tempo fader centred');
+    assert((await page.textContent('#deckB .pitch-val')) === '+0.00%', 'pitch readout shows +0.00%');
+    assert((await page.textContent('#deckB .bpm-val')) === '128.0', 'BPM readout shows 128.0');
+    assert(await idle(), 'reset is dimmed again');
+    assert(page.errors.length === 0, `page errors: ${page.errors}`);
+    await page.close();
+  },
+
   async 'layout has no horizontal scroll at phone width'({ browser, baseUrl }) {
     const page = await openApp(browser, baseUrl);
     await page.setViewportSize({ width: 390, height: 900 });

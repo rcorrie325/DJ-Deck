@@ -13,7 +13,7 @@ the matching tracks from their own music files.
 - Play / CDJ-style cue (hold to preview), 8 hot cues (two rows of pads; keys 1–4 / 7–0 for the first four)
 - Beat-snapped auto loops (½–16 beats) plus manual loops: IN / OUT, RELOOP (exit / re-enable), ½× and 2×
 - **Key lock** (KEY): change tempo without changing pitch (WSOLA time-stretch in an AudioWorklet)
-- Tempo fader with ±8 / ±16 / ±50% ranges, pitch-bend nudge, spinning platter (nudge while playing, scrub while paused)
+- Tempo fader with ±8 / ±16 / ±50% ranges, a **0%** button to reset to the original BPM, pitch-bend nudge, spinning platter (nudge while playing, scrub while paused)
 - **Sync** matches tempo *and* beat phase to the other deck (handles half/double time)
 
 **Mixer**

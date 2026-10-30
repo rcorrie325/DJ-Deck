@@ -97,6 +97,7 @@ function deckTemplate(id) {
       <button class="btn small keylock" title="Key lock: keep the pitch when changing tempo">KEY</button>
       <button class="btn small range" title="Pitch range">±8%</button>
       <input type="range" class="pitch-fader" min="-1" max="1" step="0.0005" value="0" title="Tempo (double-click to reset)">
+      <button class="btn small tempo-reset" title="Reset tempo to the track's original BPM">0%</button>
       <div class="bend">
         <button class="btn small bend-dn" title="Nudge slower">◀</button>
         <button class="btn small bend-up" title="Nudge faster">▶</button>
@@ -128,6 +129,7 @@ function setupDeck(id) {
     loopOut: $('.loop-out', root),
     reloop: $('.reloop', root),
     pitch: $('.pitch-fader', root),
+    tempoReset: $('.tempo-reset', root),
     overview: $('.overview', root),
     disc: $('.platter-disc', root),
     art: $('.platter-art', root),
@@ -160,6 +162,7 @@ function setupDeck(id) {
   ui.keylock.addEventListener('click', () => deck.setKeylock(!deck.keylock));
   ui.pitch.addEventListener('input', () => deck.setPitch(+ui.pitch.value));
   ui.pitch.addEventListener('dblclick', () => { ui.pitch.value = 0; deck.setPitch(0); });
+  ui.tempoReset.addEventListener('click', () => deck.setPitch(0));
   ui.range.addEventListener('click', () => {
     const ranges = [0.08, 0.16, 0.5];
     const rate = deck.rate;
@@ -239,6 +242,8 @@ function updateDeckUI(id) {
   ui.keylock.classList.toggle('on', deck.keylock);
   ui.range.textContent = `±${Math.round(deck.range * 100)}%`;
   ui.pitch.value = deck.pitch;
+  // Dimmed rather than disabled, so MIDI Learn can still click it at 0%.
+  ui.tempoReset.classList.toggle('idle', !deck.loaded || deck.rate === 1);
   const pct = (deck.rate - 1) * 100;
   ui.pitchVal.textContent = `${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%`;
   ui.bpm.textContent = deck.currentBpm ? deck.currentBpm.toFixed(1) : '--.-';

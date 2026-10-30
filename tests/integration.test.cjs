@@ -1,5 +1,5 @@
 // Cross-feature checks: a MIDI controller driving features built separately
-// (key lock, 8 hot cues, manual loops, mixer FX, headphone cue).
+// (key lock, tempo reset, 8 hot cues, manual loops, mixer FX).
 const fs = require('fs');
 const { generated, addFiles, loadDeck, assert, near, openApp, MUSIC } = require('./lib.cjs');
 const { open, send, learn, done } = require('./midi-helpers.cjs');
@@ -10,7 +10,7 @@ const press = async (page, note) => {
 };
 
 module.exports = {
-  async 'controller drives key lock, hot cue 8, manual loops and FX'({ browser, baseUrl }) {
+  async 'controller drives key lock, tempo reset, hot cue 8, manual loops and FX'({ browser, baseUrl }) {
     const page = await open(browser, baseUrl);
     await addFiles(page, [generated.groove124()]);
     await loadDeck(page, 1, 'A');
@@ -20,6 +20,7 @@ module.exports = {
     await learn(page, '#deckA .loop-in', [0x90, 0x30, 127]);
     await learn(page, '#deckA .loop-out', [0x90, 0x31, 127]);
     await learn(page, '#deckA .loop-half', [0x90, 0x32, 127]);
+    await learn(page, '#deckA .tempo-reset', [0x90, 0x21, 127]); // learnable while dimmed at 0%
     await learn(page, '.mix-col[data-ch="A"] .fx-on', [0x90, 0x40, 127]);
     await learn(page, '.mix-col[data-ch="A"] [data-k="fx-depth"]', [0xb0, 0x41, 64]);
     await done(page);
@@ -33,6 +34,10 @@ module.exports = {
     assert((await state()).keylock, 'key lock should turn on from the controller');
     assert(await page.$eval('#deckA .keylock', (e) => e.classList.contains('on')), 'KEY button lit');
     await page.waitForFunction(() => window.__midiSent.some((m) => m[0] === 0x90 && m[1] === 0x20 && m[2] === 127));
+
+    await page.evaluate(() => window.spindeck.decks.A.setPitch(0.5));
+    await press(page, 0x21);
+    assert(await page.evaluate(() => window.spindeck.decks.A.rate) === 1, 'controller reset tempo to 0%');
 
     await page.evaluate(() => window.spindeck.decks.A.seek(10));
     await press(page, 0x27);

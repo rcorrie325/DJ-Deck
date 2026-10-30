@@ -123,6 +123,10 @@ export function buildTargets({ decks, mixer, toast = () => {}, jogSensitivity = 
       on: (v, pressed) => deck.setBend(pressed ? 0.04 : 0),
     });
     add({
+      id: `${id}.tempoReset`, label: `${L} Reset tempo`, selector: `${d} .tempo-reset`, type: 'button',
+      on: press(() => deck.setPitch(0)),
+    });
+    add({
       id: `${id}.pitch`, label: `${L} Tempo fader`, selector: `${d} .pitch-fader`, type: 'absolute',
       on: (v) => {
         const p = clamp(v * 2 - 1, -1, 1);

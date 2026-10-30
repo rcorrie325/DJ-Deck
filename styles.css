@@ -360,3 +360,7 @@ dialog select { background: #0e1015; border: 1px solid var(--line); border-radiu
 /* Deck key readout */
 .deck-key { font-weight: 700; font-variant-numeric: tabular-nums; color: var(--ok); min-height: 1.2em; }
 .deck-key.shifted { color: var(--warn); }
+
+/* Tempo reset */
+.tempo-reset { width: 100%; font-variant-numeric: tabular-nums; }
+.tempo-reset.idle { opacity: .4; }
