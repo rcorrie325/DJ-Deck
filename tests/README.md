@@ -16,6 +16,7 @@ npm test              # run everything; `npm test -- music` runs one file
 | `deck.test.cjs` | Position clock, seeking, key lock pitch (offline render), reported position vs. the audible audio, manual loops, 8 hot cues |
 | `mixer.test.cjs` | FX bypass is bit-identical, echo timing, reverb tail, flanger, 4-channel headphone cue routing, mixer UI |
 | `midi.test.cjs` | MIDI Learn, soft takeover, jog encoders, cue hold, LED feedback, saving/export/import (fake controller) |
+| `flx4.test.cjs` | Built-in Pioneer DDJ-FLX4 mapping driven by the board's real MIDI messages: transport, 14-bit faders with soft takeover, tempo direction, pads, jog, FX, browse/load, lights, keep-alive, override and switch-off |
 | `integration.test.cjs` | Controller driving key lock, hot cue 8, manual loops and FX; deck key readout with and without key lock |
 | `music.test.cjs` | BPM and beat grid on real music (skipped until `fetch-music` has run) |
 

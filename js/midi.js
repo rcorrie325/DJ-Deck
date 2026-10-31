@@ -1,10 +1,15 @@
 // Web MIDI controller support: device handling, MIDI Learn, soft takeover, encoders, LED feedback.
 
+import { DDJ_FLX4 } from './controllers/ddj-flx4.js';
+
 const STORE = 'spindeck.midi.mappings';
 const SETTINGS = 'spindeck.midi.settings';
 const UNSUPPORTED = 'Controllers need Chrome or Edge (Web MIDI)';
 const TAKEOVER = 0.04; // soft-takeover window (fraction of the control's range)
 const LED_MS = 100;
+const KEEPALIVE_MS = 200;
+// Controllers with a built-in mapping that works as soon as they're plugged in.
+const PROFILES = [DDJ_FLX4];
 
 const $ = (sel) => document.querySelector(sel);
 const esc = (s = '') => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -50,7 +55,9 @@ export class Midi {
     this.toast = toast;
     this.access = null;
     this.mappings = load(STORE, {}); // { deviceName: { msgKey: { target, kind, type, ch, data1, led, mode? } } }
-    this.settings = { led: true, ...load(SETTINGS, {}) };
+    this.settings = { led: true, builtin: true, invertTempo: false, ...load(SETTINGS, {}) };
+    this.profiles = new Map(); // input port name -> { profile, inst } for boards with a built-in mapping
+    this.keepaliveTimer = null;
     this.learning = false;
     this.learnTarget = null;
     this.state = new Map(); // runtime per-mapping state (soft takeover, encoder detection)
@@ -72,9 +79,11 @@ export class Midi {
     }, true);
 
     // Reconnect silently if the user already granted MIDI access.
-    navigator.permissions?.query({ name: 'midi' })
-      .then((p) => { if (p.state === 'granted' && navigator.requestMIDIAccess) this.connect(); })
-      .catch(() => {});
+    // Ask for sysex only if it was granted before, so no prompt appears on page load.
+    const granted = (desc) => navigator.permissions?.query(desc).then((p) => p.state === 'granted').catch(() => false);
+    Promise.all([granted({ name: 'midi', sysex: true }), granted({ name: 'midi' })]).then(([sx, plain]) => {
+      if ((sx || plain) && navigator.requestMIDIAccess) this.connect({ sysex: !!sx });
+    });
   }
 
   get supported() { return typeof navigator.requestMIDIAccess === 'function'; }
@@ -85,7 +94,8 @@ export class Midi {
 
   // ---------- connection ----------
 
-  async connect() {
+  // sysex lets SpinDeck send the keep-alive some boards (e.g. the DDJ-FLX4) expect; it's optional.
+  async connect({ sysex = true } = {}) {
     if (!this.supported) {
       this.#setStatus(UNSUPPORTED);
       this.toast(UNSUPPORTED);
@@ -93,7 +103,10 @@ export class Midi {
     }
     if (!this.access) {
       try {
-        this.access = await navigator.requestMIDIAccess({ sysex: false });
+        this.access = await navigator.requestMIDIAccess({ sysex }).catch((err) => {
+          if (!sysex) throw err;
+          return navigator.requestMIDIAccess({ sysex: false });
+        });
       } catch (err) {
         this.#setStatus(`MIDI access was blocked (${err.message || err.name}). Allow it in the site settings and try again.`);
         return false;
@@ -110,8 +123,62 @@ export class Midi {
     for (const input of this.inputs) {
       input.onmidimessage = (e) => this.handle(input.name, e.data);
     }
+    this.#syncProfiles();
     this.ledCache.clear(); // resend LED state to newly plugged devices
     this.render();
+  }
+
+  // ---------- built-in controller mappings ----------
+
+  #syncProfiles() {
+    const names = new Set(this.inputs.map((p) => p.name));
+    for (const [name, p] of this.profiles) {
+      if (names.has(name) && this.settings.builtin) continue;
+      this.#send(name, p.inst.lightsOff());
+      this.profiles.delete(name);
+    }
+    if (this.settings.builtin) {
+      for (const name of names) {
+        if (this.profiles.has(name)) continue;
+        const profile = PROFILES.find((pr) => pr.match(name));
+        if (!profile) continue;
+        const inst = profile.create({
+          target: (id) => this.byId.get(id),
+          decks: window.spindeck?.decks,
+          mixer: window.spindeck?.mixer,
+          toast: this.toast,
+          settings: this.settings,
+        });
+        this.profiles.set(name, { profile, inst });
+        this.toast(`${profile.name} connected — ready to play`);
+      }
+    }
+    clearInterval(this.keepaliveTimer);
+    this.keepaliveTimer = null;
+    if (this.access?.sysexEnabled && this.profiles.size) {
+      const tick = () => { for (const [name, p] of this.profiles) this.#send(name, [p.inst.keepalive()]); };
+      tick();
+      this.keepaliveTimer = setInterval(tick, KEEPALIVE_MS);
+    }
+  }
+
+  #send(device, messages) {
+    if (!messages?.length) return;
+    for (const o of this.#outputsFor(device)) {
+      for (const m of messages) { try { o.send(m); } catch { /* port went away */ } }
+    }
+  }
+
+  setBuiltin(on) {
+    this.settings.builtin = !!on;
+    save(SETTINGS, this.settings);
+    if (this.access) this.#syncProfiles();
+    this.render();
+  }
+
+  setInvertTempo(on) {
+    this.settings.invertTempo = !!on;
+    save(SETTINGS, this.settings);
   }
 
   // ---------- incoming messages ----------
@@ -127,7 +194,14 @@ export class Midi {
     }
     const m = this.mappings[device]?.[msg.key];
     const t = m && this.byId.get(m.target);
-    if (!t) return;
+    if (!t) {
+      // No learned mapping for this control: fall back to the board's built-in mapping, if any.
+      const p = this.profiles.get(device);
+      if (p) {
+        try { p.inst.handle(data); } catch (err) { console.warn(`${p.profile.name} mapping failed`, err); }
+      }
+      return;
+    }
     const st = this.#state(device, msg.key);
     try {
       if (m.kind === 'button') t.on(msg.value, msg.pressed);
@@ -325,6 +399,9 @@ export class Midi {
 
   updateLeds() {
     if (!this.settings.led || !this.access) return;
+    for (const [name, p] of this.profiles) {
+      try { this.#send(name, p.inst.lights()); } catch (err) { console.warn(`${p.profile.name} lights failed`, err); }
+    }
     for (const [device, maps] of Object.entries(this.mappings)) {
       const outs = this.#outputsFor(device);
       if (!outs.length) continue;
@@ -343,6 +420,7 @@ export class Midi {
   }
 
   #ledsOff() {
+    for (const [name, p] of this.profiles) this.#send(name, p.inst.lightsOff());
     for (const [device, maps] of Object.entries(this.mappings)) {
       const outs = this.#outputsFor(device);
       for (const [key, m] of Object.entries(maps)) {
@@ -405,6 +483,16 @@ export class Midi {
     $('#midiBtn')?.addEventListener('click', () => { this.render(); $('#midiDialog').showModal(); });
     $('#midiConnect')?.addEventListener('click', () => this.connect());
     $('#midiLearn')?.addEventListener('click', () => this.setLearn(!this.learning));
+    const builtin = $('#midiBuiltin');
+    if (builtin) {
+      builtin.checked = this.settings.builtin;
+      builtin.addEventListener('change', () => this.setBuiltin(builtin.checked));
+    }
+    const inv = $('#midiInvertTempo');
+    if (inv) {
+      inv.checked = this.settings.invertTempo;
+      inv.addEventListener('change', () => this.setInvertTempo(inv.checked));
+    }
     const led = $('#midiLed');
     if (led) {
       led.checked = this.settings.led;
@@ -468,7 +556,11 @@ export class Midi {
     else this.#setStatus(`Connected: ${this.inputs.length} MIDI input${this.inputs.length === 1 ? '' : 's'}.`);
     devs.innerHTML = this.inputs.map((p) => {
       const n = Object.keys(this.mappings[p.name] || {}).length;
-      return `<li><span class="midi-dot"></span>${esc(p.name)} <span class="muted">· ${n} mapping${n === 1 ? '' : 's'}</span></li>`;
+      const builtin = this.profiles.get(p.name);
+      const info = builtin
+        ? `<span class="midi-builtin">✓ built-in ${esc(builtin.profile.name)} mapping</span>${n ? ` <span class="muted">+ ${n} of your own</span>` : ''}`
+        : `<span class="muted">· ${n} mapping${n === 1 ? '' : 's'}</span>`;
+      return `<li><span class="midi-dot"></span>${esc(p.name)} ${info}</li>`;
     }).join('');
     $('#midiConnect').textContent = this.access ? 'Rescan' : 'Connect controller';
     $('#midiLearn').classList.toggle('on', this.learning);

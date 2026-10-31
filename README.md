@@ -32,10 +32,61 @@ music files; nothing is uploaded anywhere.
 Keyboard shortcuts are listed under the **?** button. DJ controllers can be
 mapped with MIDI Learn under **🎛** (see below).
 
+## Pioneer DDJ-FLX4: plug and play
+
+The **DDJ-FLX4** has a built-in mapping: no MIDI Learn needed.
+
+1. Use **Chrome or Edge**. Close rekordbox, Serato or any other DJ software
+   first: on Windows only one app at a time can use the board.
+2. Plug the FLX4 in over USB.
+3. Click **🎛** in the top bar, then **Connect controller**, and allow MIDI
+   access when the browser asks. If it also asks to "control and reprogram MIDI
+   devices", allow that too: it lets SpinDeck send the FLX4 the same
+   keep-alive message rekordbox does. Everything else works without it.
+   The dialog shows **✓ built-in Pioneer DDJ-FLX4 mapping** once it's detected.
+   The browser remembers this, so next time the board connects by itself.
+4. For sound through the FLX4, open **⚙ Settings → Audio output** and pick the
+   DDJ-FLX4. If your system exposes all four channels, the master plays on the
+   MASTER OUT and the headphone cue on the PHONES jack.
+
+| On the FLX4 | In SpinDeck |
+| --- | --- |
+| PLAY/PAUSE, CUE | play/pause; cue (hold to preview) |
+| SHIFT + CUE | back to the start of the track |
+| BEAT SYNC / SHIFT + BEAT SYNC | sync to the other deck / change the tempo range |
+| TEMPO fader | tempo, with soft takeover (top = slower, like a CDJ) |
+| Jog wheel (top or side) | nudge while playing, scrub while paused |
+| SHIFT + jog | fast search |
+| LOOP IN / OUT, RELOOP/EXIT | manual loop in / out, reloop or exit |
+| CUE/LOOP CALL ◀ / ▶ | halve / double the loop |
+| Pads in HOT CUE mode | hot cues 1–8 (SHIFT + pad deletes) |
+| Pads in BEAT LOOP mode | ¼ to 32-beat loops |
+| Pads in BEAT JUMP mode | jump −1/+1, −2/+2, −4/+4, −8/+8 beats |
+| TRIM, EQ HI/MID/LOW, CFX (filter) | gain, EQ and filter |
+| Channel faders, crossfader | channel faders, crossfader |
+| Headphone CUE buttons, HEADPHONES MIX | headphone cue, cue/master mix |
+| BEAT FX ON/OFF, SELECT, ◀ ▶, LEVEL/DEPTH, CH SELECT | FX on/off, FX type, FX beats, FX depth, which channel the FX goes on |
+| BROWSE knob, LOAD 1 / LOAD 2 | move through the track list, load onto deck A / B |
+
+Lights on the board follow the app: play, cue, sync, headphone cue, hot cue
+pads, loop pads, reloop, FX on, and the channel level meters.
+
+Not supported yet: scratching (the jog nudges and scrubs instead), the sampler,
+pad FX and keyboard pad modes, and the MASTER LEVEL / HEADPHONES LEVEL knobs, which
+are handled inside the board's own hardware anyway.
+
+The mapping follows Mixxx's community DDJ-FLX4 mapping. **It has been tested
+with simulated FLX4 MIDI messages, not on a physical board yet.** If the tempo
+fader runs the wrong way, tick **Reverse the DDJ's tempo fader** in the 🎛
+dialog. Anything you map with MIDI Learn overrides the built-in mapping for
+that control, and the built-in mapping can be switched off in the 🎛 dialog.
+
 ## Using a DJ controller
 
 SpinDeck can be played from any MIDI DJ controller through Web MIDI. This
 works in **Chrome and Edge** only (Firefox and Safari don't support Web MIDI).
+Controllers without a built-in mapping (everything except the DDJ-FLX4 for now)
+are mapped once with MIDI Learn:
 
 1. Plug the controller in over USB.
 2. Click **🎛** in the top bar, then **Connect controller** and allow MIDI
@@ -170,11 +221,12 @@ tests/            end-to-end tests (see tests/README.md)
 js/knob.js        rotary knob control
 js/midi.js        Web MIDI: devices, MIDI Learn, soft takeover, LED feedback
 js/midi-targets.js  list of controls a controller can be mapped to
+js/controllers/ddj-flx4.js  built-in Pioneer DDJ-FLX4 mapping
 ```
 
 ## Limitations / ideas for next steps
 
-- **Not tested on real DJ hardware.** Controller mapping, controller lights and 4-channel headphone cue were tested with a simulated controller and a simulated 4-channel output only.
+- **Not tested on real DJ hardware.** The DDJ-FLX4 mapping, MIDI Learn, controller lights and 4-channel headphone cue were tested with simulated MIDI messages and a simulated 4-channel output only.
 - BPM and key are filled in the first time a track is loaded onto a deck; there's no background analysis of the whole library yet.
 - The beat grid can't be edited by hand yet; loose live recordings can get an off grid.
 - With key lock on, a loop can overshoot its end by up to ~40 ms before jumping back.

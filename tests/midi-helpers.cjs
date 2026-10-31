@@ -3,12 +3,12 @@ const { openApp, assert } = require('./lib.cjs');
 
 const DEVICE = 'Fake DJ Controller';
 
-function fakeMidi(name) {
+function fakeMidi(name, sysex = false) {
   const sent = [];
   const mk = (id, type) => ({ id, name, type, state: 'connected', connection: 'open', onmidimessage: null });
   const input = mk('in-1', 'input');
   const output = { ...mk('out-1', 'output'), send(data) { sent.push(Array.from(data)); } };
-  const access = { sysexEnabled: false, inputs: new Map([[input.id, input]]), outputs: new Map([[output.id, output]]), onstatechange: null };
+  const access = { sysexEnabled: !!sysex, inputs: new Map([[input.id, input]]), outputs: new Map([[output.id, output]]), onstatechange: null };
   window.__midiSent = sent;
   window.__midiSend = (bytes, port = input) => port.onmidimessage?.({ data: new Uint8Array(bytes), target: port });
   window.__midiPlug = (n) => {

@@ -355,3 +355,6 @@ dialog select { background: #0e1015; border: 1px solid var(--line); border-radiu
 /* Tempo reset */
 .tempo-reset { width: 100%; font-variant-numeric: tabular-nums; }
 .tempo-reset.idle { opacity: .4; }
+
+/* Built-in controller mappings */
+.midi-builtin { color: var(--ok); font-weight: 600; }
