@@ -117,6 +117,45 @@ module.exports = {
     await page.close();
   },
 
+  async 'DDJ-FLX4 jog top moves through a playing track; the outer ring only nudges'({ browser, baseUrl }) {
+    const page = await openFlx4(browser, baseUrl);
+    await page.click('#midiDialog button[value="close"]');
+    await addFiles(page, [generated.groove124()]);
+    await loadDeck(page, 1, 'A');
+    await page.evaluate(() => window.spindeck.decks.A.seek(20));
+    await press(page, 0x90, 0x0b); // PLAY
+    await page.waitForTimeout(300);
+
+    // Turn the platter top one full turn (720 ticks) in fast bursts, as the board sends them.
+    // Measure how far the playhead moved beyond normal playback.
+    const turn = (cc, value) => page.evaluate(async ([c, v]) => {
+      const d = window.spindeck.decks.A;
+      const p0 = d.position;
+      const t0 = d.ctx.currentTime;
+      for (let i = 0; i < 72; i++) {
+        window.__midiSend([0xb0, c, v]);
+        if (i % 8 === 7) await new Promise((r) => setTimeout(r, 10));
+      }
+      await new Promise((r) => setTimeout(r, 150));
+      return { moved: d.position - p0 - (d.ctx.currentTime - t0) * d.effectiveRate, playing: d.playing, bend: d.bend };
+    }, [cc, value]);
+
+    let r = await turn(0x22, 64 + 10);
+    near(r.moved, 1.8, 0.1, 'platter top forward one turn moves ~1.8 s ahead while playing');
+    assert(r.playing, 'track keeps playing while the platter moves it');
+    r = await turn(0x22, 64 - 10);
+    near(r.moved, -1.8, 0.1, 'platter top backward moves ~1.8 s back while playing');
+
+    // Outer ring while playing: a tempo nudge only, no jump.
+    r = await turn(0x21, 64 + 10);
+    assert(Math.abs(r.moved) < 0.15, `outer ring should only nudge, but moved ${r.moved.toFixed(3)} s`);
+    await page.waitForTimeout(200);
+    assert(await page.evaluate(() => window.spindeck.decks.A.bend) === 0, 'nudge releases after the wheel stops');
+
+    assert(page.errors.length === 0, `page errors: ${page.errors}`);
+    await page.close();
+  },
+
   async 'DDJ-FLX4: your MIDI Learn mappings override the built-in ones; built-in can be switched off'({ browser, baseUrl }) {
     const page = await openFlx4(browser, baseUrl);
     await page.click('#midiDialog button[value="close"]');

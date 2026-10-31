@@ -10,10 +10,11 @@ const LOOP_PADS = [0.25, 0.5, 1, 2, 4, 8, 16, 32]; // BEAT LOOP pad mode, pads 1
 const JUMP_PADS = [-1, 1, -2, 2, -4, 4, -8, 8]; // BEAT JUMP pad mode, pads 1–8 (beats)
 const FX_ORDER = ['echo', 'reverb', 'flanger'];
 const TAKEOVER = 0.03;
-const JOG_SEEK = 1.8 / 720; // s per tick while paused: one turn ≈ 1.8 s, like a 33⅓ rpm record
+const JOG_SEEK = 1.8 / 720; // s per tick on the platter top: one turn ≈ 1.8 s, like a 33⅓ rpm record
 const JOG_SEARCH = 0.05; // s per tick for SHIFT + jog
 const JOG_BEND = 0.01; // playback-rate bend per tick while playing
 const JOG_DECAY_MS = 80;
+const SCRUB_MS = 25; // while playing, platter moves are applied in batches this often
 // Sent every 200 ms by Mixxx and rekordbox; the board treats it as "software connected".
 const KEEPALIVE = [0xf0, 0x00, 0x40, 0x05, 0x00, 0x00, 0x04, 0x05, 0x00, 0x50, 0x02, 0xf7];
 
@@ -36,6 +37,8 @@ class Flx4 {
     this.takeover = new Map();
     this.fxCh = { A: false, B: false }; // BEAT FX channel select switch
     this.jogTimers = {};
+    this.scrub = { A: 0, B: 0 }; // platter ticks waiting to be applied
+    this.scrubTimers = {};
     this.ledCache = new Map();
   }
 
@@ -99,7 +102,7 @@ class Flx4 {
         case 0x51: if (pressed) this.#press(`${id}.loopHalf`); return true; // CUE/LOOP CALL ◀: halve loop
         case 0x53: if (pressed) this.#press(`${id}.loopDouble`); return true; // CUE/LOOP CALL ▶: double loop
         case 0x54: if (pressed) this.#press(`${id}.pfl`); return true; // headphone CUE
-        case 0x36: case 0x67: return true; // jog touch (no scratch engine yet)
+        case 0x36: case 0x67: return true; // jog touch: turning the top already moves the track
         case 0x3f: return true; // SHIFT: the board already sends separate shifted notes
         default: return false;
       }
@@ -140,7 +143,8 @@ class Flx4 {
   #cc(status, ch, cc, value) {
     if (ch <= 1) {
       const id = DECKS[ch];
-      if (cc === 0x21 || cc === 0x22 || cc === 0x23) { this.#jog(id, value - 64); return true; } // jog side / platter
+      if (cc === 0x21) { this.#jogSide(id, value - 64); return true; } // jog outer ring: nudge
+      if (cc === 0x22 || cc === 0x23) { this.#platter(id, value - 64); return true; } // jog top: move through the track
       if (cc === 0x29) { this.#jogSearch(id, value - 64); return true; } // SHIFT + jog
       const fourteen = { 0x00: 'pitch', 0x13: 'fader', 0x04: 'trim', 0x07: 'high', 0x0b: 'mid', 0x0f: 'low' };
       const base = cc < 0x20 ? cc : cc - 0x20;
@@ -178,7 +182,8 @@ class Flx4 {
     return false;
   }
 
-  #jog(id, ticks) {
+  // Outer ring: bend the tempo while playing (beatmatching), scrub while paused.
+  #jogSide(id, ticks) {
     const deck = this.ctx.decks[id];
     if (!deck.loaded || !ticks) return;
     if (deck.playing) {
@@ -188,6 +193,25 @@ class Flx4 {
     } else {
       deck.seek(deck.position + ticks * JOG_SEEK);
     }
+  }
+
+  // Platter top: move the playhead like a record, also while the track is playing.
+  // While playing, ticks are batched so the deck isn't re-seeked hundreds of times a second.
+  #platter(id, ticks) {
+    const deck = this.ctx.decks[id];
+    if (!deck.loaded || !ticks) return;
+    if (!deck.playing) {
+      deck.seek(deck.position + ticks * JOG_SEEK);
+      return;
+    }
+    this.scrub[id] += ticks;
+    if (this.scrubTimers[id]) return;
+    this.scrubTimers[id] = setTimeout(() => {
+      this.scrubTimers[id] = null;
+      const t = this.scrub[id];
+      this.scrub[id] = 0;
+      if (t && deck.loaded) deck.seek(deck.position + t * JOG_SEEK);
+    }, SCRUB_MS);
   }
 
   #jogSearch(id, ticks) {

@@ -55,7 +55,8 @@ The **DDJ-FLX4** has a built-in mapping: no MIDI Learn needed.
 | SHIFT + CUE | back to the start of the track |
 | BEAT SYNC / SHIFT + BEAT SYNC | sync to the other deck / change the tempo range |
 | TEMPO fader | tempo, with soft takeover (top = slower, like a CDJ) |
-| Jog wheel (top or side) | nudge while playing, scrub while paused |
+| Jog wheel, top of the platter | move through the track (also while it's playing): one turn ≈ 1.8 s, like a record |
+| Jog wheel, outer ring | nudge the tempo while playing (for beatmatching), scrub while paused |
 | SHIFT + jog | fast search |
 | LOOP IN / OUT, RELOOP/EXIT | manual loop in / out, reloop or exit |
 | CUE/LOOP CALL ◀ / ▶ | halve / double the loop |
@@ -71,7 +72,7 @@ The **DDJ-FLX4** has a built-in mapping: no MIDI Learn needed.
 Lights on the board follow the app: play, cue, sync, headphone cue, hot cue
 pads, loop pads, reloop, FX on, and the channel level meters.
 
-Not supported yet: scratching (the jog nudges and scrubs instead), the sampler,
+Not supported yet: true scratch sound (turning the platter top moves the playhead, but there's no vinyl "scratch" audio while you hold it), the sampler,
 pad FX and keyboard pad modes, and the MASTER LEVEL / HEADPHONES LEVEL knobs, which
 are handled inside the board's own hardware anyway.
 
