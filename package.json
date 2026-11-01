@@ -1,13 +1,61 @@
 {
   "name": "spindeck",
+  "productName": "SpinDeck",
+  "version": "1.0.0",
   "private": true,
-  "description": "Browser DJ app",
+  "description": "DJ app for your own music files",
+  "author": "SpinDeck",
+  "main": "desktop/main.cjs",
   "scripts": {
     "start": "python3 -m http.server 8080 --bind 127.0.0.1",
+    "desktop": "electron .",
+    "dist": "electron-builder --mac dmg --universal --publish never",
     "test": "node tests/run.cjs",
     "fetch-music": "sh tests/fetch-music.sh"
   },
   "devDependencies": {
+    "electron": "44.8.0",
+    "electron-builder": "26.17.0",
     "playwright": "1.63.0"
+  },
+  "build": {
+    "appId": "app.spindeck.desktop",
+    "productName": "SpinDeck",
+    "copyright": "SpinDeck",
+    "files": [
+      "index.html",
+      "styles.css",
+      "js/**/*",
+      "desktop/main.cjs",
+      "desktop/preload.cjs",
+      "desktop/files.cjs",
+      "package.json"
+    ],
+    "directories": {
+      "buildResources": "build",
+      "output": "dist"
+    },
+    "mac": {
+      "category": "public.app-category.music",
+      "icon": "build/icon.png",
+      "target": [{ "target": "dmg", "arch": ["universal"] }],
+      "artifactName": "SpinDeck.${ext}",
+      "identity": "-",
+      "hardenedRuntime": false,
+      "extendInfo": {
+        "NSMicrophoneUsageDescription": "SpinDeck only uses this to show the names of your audio output devices (for example a DJ controller). It never records sound."
+      }
+    },
+    "dmg": {
+      "title": "SpinDeck",
+      "artifactName": "SpinDeck.dmg"
+    },
+    "fileAssociations": [
+      {
+        "ext": ["mp3", "wav", "flac", "ogg", "m4a", "aac", "aif", "aiff", "opus"],
+        "name": "Audio",
+        "role": "Viewer"
+      }
+    ]
   }
 }

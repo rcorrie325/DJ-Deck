@@ -1,8 +1,41 @@
-# SpinDeck — browser DJ app
+# SpinDeck — DJ app for Mac (and the browser)
 
-A two-deck DJ app in the spirit of Serato DJ, running entirely in the browser
-(plain HTML/CSS/JS, no build step, no backend, no accounts). You mix your own
-music files; nothing is uploaded anywhere.
+A two-deck DJ app in the spirit of Serato DJ. You mix your own music files;
+nothing is uploaded anywhere. It runs as a **normal Mac app** or in Chrome/Edge.
+
+## Get the Mac app
+
+1. Download **SpinDeck.dmg** from the
+   [SpinDeck for Mac release](https://github.com/rcorrie325/DJ-Deck/releases/tag/mac-latest)
+   and open it.
+2. Drag **SpinDeck** into **Applications**.
+3. **First launch only:** macOS blocks apps that aren't signed with a paid Apple
+   Developer account, so it will say SpinDeck "can't be opened". Go to
+   **System Settings → Privacy & Security**, scroll down and click
+   **Open Anyway** next to the SpinDeck message (on older macOS: right-click
+   SpinDeck → **Open**). After that it opens normally.
+
+The app runs on Intel and Apple Silicon Macs. Compared with the website:
+- **It remembers everything:** the songs and folders you've added, both decks
+  (song, position, tempo, key lock, loop) and the mixer all come back when you
+  reopen it, paused. There are no reconnect clicks.
+- **No prompts:** your DJ controller (e.g. the DDJ-FLX4) connects straight away.
+- **File → Add Music Files… (⌘O)** and **Add Music Folder… (⇧⌘O)**. You can also
+  drop songs on the window or the Dock icon.
+- **Moved songs:** if you move or rename a song in Finder, it shows as missing in
+  its crates with a **Locate…** button. Point it at the file and its cues and
+  crates reattach.
+
+The `.dmg` is built automatically by GitHub Actions
+(`.github/workflows/mac-app.yml`) on every push to `main`. **One-time setup:** the
+workflow file is stored at `desktop/mac-app.yml`, because GitHub only lets your
+own account add workflows. On GitHub, open `desktop/mac-app.yml`, click the pencil
+(Edit), change the file name at the top to `.github/workflows/mac-app.yml`, and
+commit. Each build is
+smoke-tested on a real Mac before it's published: launch, play a song from disk,
+quit, relaunch, check everything came back. To build it yourself on a Mac:
+`npm ci && npm run dist`, which writes `dist/SpinDeck.dmg`. To run it without
+packaging: `npm run desktop`.
 
 ## Features
 
@@ -124,7 +157,11 @@ Details:
 - This has been tested with a simulated controller only, not on physical
   hardware yet. Reports and shared mapping files are welcome.
 
-## How to run it
+## How to run it in a browser
+
+Prefer the Mac app above. The browser version works too, but it can't reopen
+your music after a restart without asking first.
+
 
 You need two things: a web browser and a tiny local web server. Nothing gets
 installed into the app itself; there's no `npm install` and no build step.
@@ -218,6 +255,10 @@ js/analysis.js    waveform peaks, BPM/beat-grid and musical key detection
 js/waveform.js    canvas waveform rendering
 js/library.js     local file import, ID3 tags, saved-library restore
 js/store.js       IndexedDB storage for the saved library, cues and crates
+js/session.js     remembers decks and mixer between launches
+js/desktop.js     Mac app support: songs read straight from disk
+desktop/          the Mac app (Electron): main process, preload bridge, file access, smoke test
+build/icon.png    app icon
 tests/            end-to-end tests (see tests/README.md)
 js/knob.js        rotary knob control
 js/midi.js        Web MIDI: devices, MIDI Learn, soft takeover, LED feedback

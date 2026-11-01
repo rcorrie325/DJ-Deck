@@ -3,6 +3,7 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const { chromium } = require('playwright');
+const { mediaResponse, isAudio } = require('../desktop/files.cjs');
 
 const ROOT = path.resolve(__dirname, '..');
 const CACHE = path.join(__dirname, '.cache');
@@ -18,6 +19,14 @@ function startServer() {
     const url = decodeURIComponent(new URL(req.url, 'http://x').pathname);
     let file = path.join(ROOT, url.endsWith('/') ? url + 'index.html' : url);
     if (!file.startsWith(ROOT) || !fs.existsSync(file)) { res.writeHead(404); return res.end(); }
+    if (isAudio(file)) {
+      // Same range handling as the desktop app's media URLs (desktop/files.cjs).
+      mediaResponse(file, req.headers.range).then((r) => {
+        res.writeHead(r.status, r.headers);
+        if (r.stream) r.stream.pipe(res); else res.end();
+      });
+      return;
+    }
     res.writeHead(200, { 'Content-Type': TYPES[path.extname(file)] || 'application/octet-stream' });
     fs.createReadStream(file).pipe(res);
   });

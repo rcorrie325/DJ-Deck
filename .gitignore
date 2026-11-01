@@ -3,3 +3,5 @@ node_modules/
 tests/.cache/
 tests/.music/
 .claude/worktrees/
+dist/
+smoke/

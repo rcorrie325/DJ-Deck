@@ -1,0 +1,91 @@
+# One-time setup: move this file to .github/workflows/mac-app.yml. GitHub only lets your own
+# account add workflow files. On GitHub, open this file, click the pencil (Edit), change the
+# file name at the top to .github/workflows/mac-app.yml, and commit. GitHub then builds SpinDeck.dmg.
+name: Mac app
+
+on:
+  push:
+    branches: [main, claude/spotify-dj-app]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: mac-app-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+      - run: npx playwright install --with-deps chromium
+      - run: npm run fetch-music
+      - run: npm test
+
+  build:
+    name: Build SpinDeck.dmg
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+
+      - name: Build the app (Intel + Apple Silicon)
+        run: npm run dist
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+
+      - name: Check the app's signature
+        run: |
+          codesign --verify --deep --strict --verbose=2 dist/mac-universal/SpinDeck.app
+          codesign -dv dist/mac-universal/SpinDeck.app
+          lipo -archs dist/mac-universal/SpinDeck.app/Contents/MacOS/SpinDeck
+
+      - name: Smoke test the built app
+        run: |
+          mkdir -p smoke
+          node desktop/smoke.cjs dist/mac-universal/SpinDeck.app/Contents/MacOS/SpinDeck smoke
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: SpinDeck-mac
+          path: |
+            dist/SpinDeck.dmg
+            smoke/*.png
+          if-no-files-found: ignore
+
+  release:
+    name: Publish "SpinDeck for Mac"
+    if: github.ref == 'refs/heads/main'
+    needs: [test, build] # only publish a build whose tests and smoke test passed
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: SpinDeck-mac
+          path: . # the artifact keeps its dist/ and smoke/ folders
+      - name: Replace the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete mac-latest --yes --cleanup-tag || true
+          gh release create mac-latest dist/SpinDeck.dmg \
+            --target "$GITHUB_SHA" \
+            --title "SpinDeck for Mac" \
+            --notes-file desktop/RELEASE_NOTES.md \
+            --latest

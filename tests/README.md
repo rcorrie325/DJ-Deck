@@ -18,6 +18,8 @@ npm test              # run everything; `npm test -- music` runs one file
 | `midi.test.cjs` | MIDI Learn, soft takeover, jog encoders, cue hold, LED feedback, saving/export/import (fake controller) |
 | `flx4.test.cjs` | Built-in Pioneer DDJ-FLX4 mapping driven by the board's real MIDI messages: transport, 14-bit faders with soft takeover, tempo direction, pads, jog, FX, browse/load, lights, keep-alive, override and switch-off |
 | `integration.test.cjs` | Controller driving key lock, hot cue 8, manual loops and FX; deck key readout with and without key lock |
+| `desktop-files.test.cjs` | Mac app file handling in Node: folder scanning, remembered songs/folders, what may be read, missing files, byte ranges |
+| `desktop.test.cjs` | Mac app behaviour with a simulated desktop bridge: songs, decks and mixer back after a restart; moved songs and Locate…; dropped files; mixer memory in the browser too |
 | `music.test.cjs` | BPM and beat grid on real music (skipped until `fetch-music` has run) |
 
 Generated test tracks are written to `tests/.cache/`, and downloaded music to

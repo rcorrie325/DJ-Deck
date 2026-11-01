@@ -7,6 +7,8 @@ import { drawZoom, drawOverview } from './waveform.js';
 import { Knob } from './knob.js';
 import { Midi } from './midi.js';
 import { buildTargets } from './midi-targets.js';
+import { desktop, DiskFile, toDiskFiles } from './desktop.js';
+import { setupSession } from './session.js';
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
@@ -44,12 +46,19 @@ function esc(s = '') {
 }
 
 let toastTimer;
+let toastShownAt = 0;
+let toastUntil = 0;
 function toast(msg, ms = 3500) {
   const el = $('#toast');
-  el.textContent = msg;
+  const now = Date.now();
+  // Messages that arrive close together stack instead of replacing each other (e.g. at startup).
+  const stack = !el.hidden && now - toastShownAt < 2000 && el.textContent !== msg && el.textContent.split('\n').length < 3;
+  el.textContent = stack ? `${el.textContent}\n${msg}` : msg;
   el.hidden = false;
+  toastShownAt = now;
+  toastUntil = Math.max(stack ? toastUntil : 0, now + ms);
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { el.hidden = true; }, ms);
+  toastTimer = setTimeout(() => { el.hidden = true; }, toastUntil - now);
 }
 
 // ---------- decks ----------
@@ -567,6 +576,7 @@ function toggleRecord() {
 // ---------- library UI ----------
 
 async function addFiles(files) {
+  if (desktop) files = await rememberDropped(files);
   const el = $('#crateTitle');
   const added = await library.addFiles(files, (n, total) => { el.textContent = `Importing ${n}/${total}…`; });
   added.forEach((t) => trackIndex.set(t.id, t));
@@ -580,6 +590,33 @@ async function addFiles(files) {
   renderTracks();
   if (added.length) toast(`Added ${added.length} track${added.length === 1 ? '' : 's'}`);
   return added;
+}
+
+// Desktop app: files dropped from Finder are added by path so they come back next launch.
+async function rememberDropped(files) {
+  const list = Array.from(files || []);
+  const plain = list.filter((f) => !(f instanceof DiskFile));
+  if (!plain.length) return list;
+  const entries = await desktop.addDroppedFiles(plain).catch(() => []);
+  return [...list.filter((f) => f instanceof DiskFile), ...toDiskFiles(entries)];
+}
+
+async function desktopPick(kind) {
+  try {
+    const entries = kind === 'folder' ? await desktop.pickFolder() : await desktop.pickFiles();
+    if (entries.length) await addFiles(toDiskFiles(entries));
+  } catch (err) {
+    toast(`Couldn't add music: ${err.message}`);
+  }
+}
+
+async function restoreDesktopLibrary() {
+  const { entries, missing } = await desktop.restoreLibrary();
+  if (entries.length) await addFiles(toDiskFiles(entries));
+  if (missing.length) {
+    const names = missing.map((p) => p.split(/[\\/]/).pop());
+    toast(`${missing.length} song${missing.length === 1 ? '' : 's'} or folder${missing.length === 1 ? '' : 's'} couldn't be found (moved or renamed?): ${names.slice(0, 3).join(', ')}${names.length > 3 ? '…' : ''}`, 7000);
+  }
 }
 
 function selectCrate(key, title, tracks) {
@@ -612,6 +649,7 @@ function renderTracks() {
       ? '<span class="miss" title="File not added this session">—</span>'
       : '<span class="ok">●</span>';
     const remove = inUserCrate ? '<button class="btn tiny" data-act="remove" title="Remove from crate">×</button>' : '';
+    const locate = desktop && t.source === 'missing' ? '<button class="btn tiny" data-act="locate" title="Find this song on your Mac">Locate…</button>' : '';
     const cls = [
       loadedIds.has(t.id) && 'loaded',
       t.source === 'missing' && 'unmatched',
@@ -625,7 +663,7 @@ function renderTracks() {
       <td class="key" title="${esc(key?.name || '')}">${camelot}</td>
       <td class="num">${fmtTime(t.duration, false)}</td>
       <td class="center">${local}</td>
-      <td class="load">${remove}<button class="btn tiny" data-act="A">A</button><button class="btn tiny" data-act="B">B</button></td>
+      <td class="load">${locate}${remove}<button class="btn tiny" data-act="A">A</button><button class="btn tiny" data-act="B">B</button></td>
     </tr>`;
   }).join('');
 }
@@ -867,16 +905,32 @@ async function reconnectFolders() {
   else toast('Permission to read your music folder was not granted');
 }
 
+// Desktop app: point a missing crate track at its file's new location. A moved file keeps its
+// name, size and date, so its cues and crate entries reattach automatically.
+async function locateTrack(t) {
+  const entry = await desktop.locate(t.title).catch(() => null);
+  if (!entry) return;
+  const [added] = await addFiles(toDiskFiles([entry]));
+  if (added && added.fp !== t.fp) toast(`Added “${added.title}”, but it isn't the same file as “${t.title}”, so it was added as a new track.`, 6000);
+}
+
 async function initSavedLibrary() {
   userCrates = await store.getCrates().catch(() => []);
   renderUserCrates();
-  if (window.showDirectoryPicker) await restoreFolders();
+  if (desktop) await restoreDesktopLibrary();
+  else if (window.showDirectoryPicker) await restoreFolders();
 }
 
 function setupLibrary() {
   $('#fileInput').addEventListener('change', (e) => { addFiles(e.target.files); e.target.value = ''; });
   $('#folderInput').addEventListener('change', (e) => { addFiles(e.target.files); e.target.value = ''; });
-  if (window.showDirectoryPicker) {
+  if (desktop) {
+    // Native Mac file pickers; picked songs and folders are remembered by path.
+    $('#fileInput').closest('label').addEventListener('click', (e) => { e.preventDefault(); desktopPick('files'); });
+    $('#folderInput').closest('label').addEventListener('click', (e) => { e.preventDefault(); desktopPick('folder'); });
+    desktop.onMenu((action) => desktopPick(action === 'add-folder' ? 'folder' : 'files'));
+    desktop.onOpenEntries((entries) => addFiles(toDiskFiles(entries)));
+  } else if (window.showDirectoryPicker) {
     $('#folderInput').closest('label').addEventListener('click', (e) => {
       e.preventDefault();
       pickFolder();
@@ -887,7 +941,13 @@ function setupLibrary() {
   setupCrates();
   setupLibraryDeckHooks();
   window.spindeck.crates = { list: () => userCrates, create: createCrate, add: addToCrate, remove: removeFromCrate, open: openUserCrate };
-  window.spindeck.ready = initSavedLibrary().catch((err) => console.warn('SpinDeck: saved library', err));
+  const session = setupSession({ decks, mixer, library, loadToDeck, toast });
+  window.spindeck.session = session;
+  // Saved library first, then put the decks and mixer back as they were.
+  window.spindeck.ready = initSavedLibrary()
+    .catch((err) => console.warn('SpinDeck: saved library', err))
+    .then(() => session.restore())
+    .finally(() => session.start());
 
   const body = $('#trackBody');
   body.addEventListener('click', (e) => {
@@ -896,6 +956,7 @@ function setupLibrary() {
     if (!btn || !row) return;
     const t = trackIndex.get(row.dataset.id);
     if (btn.dataset.act === 'remove') removeFromCrate(crate.key.slice(6), trackFp(t));
+    else if (btn.dataset.act === 'locate') locateTrack(t);
     else loadToDeck(btn.dataset.act, t);
   });
   body.addEventListener('dblclick', (e) => {

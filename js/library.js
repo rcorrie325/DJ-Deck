@@ -83,10 +83,11 @@ export function parseFilename(name) {
 
 function readDuration(file) {
   return new Promise((resolve) => {
-    const url = URL.createObjectURL(file);
+    // Desktop-app files are read through their media URL; browser Files through a blob URL.
+    const url = file.url || URL.createObjectURL(file);
     const a = new Audio();
     a.preload = 'metadata';
-    const done = (d) => { URL.revokeObjectURL(url); resolve(Number.isFinite(d) ? d : 0); };
+    const done = (d) => { if (!file.url) URL.revokeObjectURL(url); resolve(Number.isFinite(d) ? d : 0); };
     a.onloadedmetadata = () => done(a.duration);
     a.onerror = () => done(0);
     a.src = url;

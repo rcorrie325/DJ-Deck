@@ -40,8 +40,15 @@ module.exports = {
     await page.waitForTimeout(200);
     s = await deckState(page);
     near(s.B.currentBpm, 124, 0.01, 'deck B synced bpm');
-    const phaseDiff = Math.abs(((s.A.phase - s.B.phase + 1.5) % 1) - 0.5);
-    assert(phaseDiff < 0.02, `beat phases should match, diff=${phaseDiff}`);
+    // Median of a few samples: a real sync error is there every time, scheduling jitter on a busy machine isn't.
+    const diffs = [];
+    for (let i = 0; i < 5; i++) {
+      const p = await deckState(page);
+      diffs.push(Math.abs(((p.A.phase - p.B.phase + 1.5) % 1) - 0.5));
+      await page.waitForTimeout(100);
+    }
+    const phaseDiff = diffs.sort((x, y) => x - y)[2];
+    assert(phaseDiff < 0.02, `beat phases should match, median diff=${phaseDiff} (samples ${diffs.map((d) => d.toFixed(3))})`);
 
     await page.click('#deckA .loop[data-beats="4"]');
     await page.waitForTimeout(2500); // longer than a 4-beat loop at 124 BPM (1.94 s)
